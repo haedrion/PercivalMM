@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Windows.Input;
@@ -33,6 +34,7 @@ namespace PercivalMM.UI.ViewModels
         public ICommand MoveModUpCommand { get; }
         public ICommand MoveModDownCommand { get; }
         public ICommand DeleteModCommand { get; }
+        public ICommand LaunchGameCommand { get; }
 
 
         public MainWindowViewModel()
@@ -42,6 +44,7 @@ namespace PercivalMM.UI.ViewModels
             MoveModUpCommand = new RelayCommand<InstalledModItem>(mod => MoveModPriority(mod, -1));
             MoveModDownCommand = new RelayCommand<InstalledModItem>(mod => MoveModPriority(mod, 1));
             DeleteModCommand = new RelayCommand<InstalledModItem>(ExecuteDeleteMod);
+            LaunchGameCommand = new RelayCommand(ExecuteLaunchGame);
 
             ExecuteLiveStorageDriveScan();
         }
@@ -111,7 +114,9 @@ namespace PercivalMM.UI.ViewModels
                 }
             }
 
-            TelemetryLogStreamText += $"\n[Grid Sync] Discovered {InstalledMods.Count} mod bundle(s) on target drive.";
+            TelemetryLogStreamText += $"\n[Grid Sync] Discovered {InstalledMods.Count} mod bundle(s) on target drive."; 
+            RunConflictCheck();
+
         }
 
         private void ExecuteToggleMod(InstalledModItem? mod)
@@ -136,6 +141,7 @@ namespace PercivalMM.UI.ViewModels
                 
                 string syncResult = Witcher3ConfigSync.SyncLoadOrder(DiscoveredGamePathText, InstalledMods);
 TelemetryLogStreamText += $"\n[Proton Sync] {syncResult}";
+RunConflictCheck();
 
                 }
             }
@@ -205,7 +211,48 @@ TelemetryLogStreamText += $"\n[Proton Sync] {syncResult}";
                 TelemetryLogStreamText += $"\n❌ [Error] Failed to delete {mod.Name}: {ex.Message}";
             }
         }
+        private void ExecuteLaunchGame()
+        {
+            if (!Directory.Exists(DiscoveredGamePathText))
+            {
+                TelemetryLogStreamText += "\n⚠️ [Launcher] Cannot launch: Target game directory not verified.";
+                return;
+            }
 
+            try
+            {
+                // Force one final Proton mods.settings sync before booting!
+                string syncResult = Witcher3ConfigSync.SyncLoadOrder(DiscoveredGamePathText, InstalledMods);
+                TelemetryLogStreamText += $"\n[Proton Sync] {syncResult}";
+                TelemetryLogStreamText += "\n⚔️ [Launcher] Handing off AppID 292030 (The Witcher 3) to Steam Proton...";
+
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "xdg-open",
+                    Arguments = "steam://rungameid/292030",
+                    UseShellExecute = false
+                });
+            }
+            catch (Exception ex)
+            {
+                TelemetryLogStreamText += $"\n❌ [Launcher Error] Failed to trigger Steam: {ex.Message}";
+            }
+        }
+private void RunConflictCheck()
+     {
+         var conflicts = ConflictDetectorService.ScanForConflicts(InstalledMods);
+         if (conflicts.Count == 0)
+         {
+             TelemetryLogStreamText += "\n🛡️ [Conflict Radar] Zero overlapping mod files detected.";
+         }
+         else
+         {
+             TelemetryLogStreamText += $"\n⚠️ [Conflict Radar] Detected {conflicts.Count} file overlap(s):";
+             foreach (var c in conflicts)
+             {
+                 TelemetryLogStreamText += $"\n   {c}";
+             }
+         }
     
     }
 
@@ -218,6 +265,8 @@ TelemetryLogStreamText += $"\n[Proton Sync] {syncResult}";
         public event EventHandler? CanExecuteChanged { add { } remove { } }
     }
 
+     }
+
     public class RelayCommand<T> : ICommand
     {
         private readonly Action<T?> _action;
@@ -227,3 +276,4 @@ TelemetryLogStreamText += $"\n[Proton Sync] {syncResult}";
         public event EventHandler? CanExecuteChanged { add { } remove { } }
     }
 }
+

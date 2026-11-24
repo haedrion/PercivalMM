@@ -45,6 +45,16 @@
                         HorizontalAlignment="Stretch" 
                         HorizontalContentAlignment="Center"
                         Background="#22c55e" Foreground="White" Padding="10,8"/>
+
+                <Separator Background="#2a2a35" Height="1" Margin="0,10,0,10"/>
+
+                <Button Content="⚔️ Launch Witcher 3" 
+                        Command="{Binding LaunchGameCommand}"
+                        HorizontalAlignment="Stretch" 
+                        HorizontalContentAlignment="Center"
+                        FontWeight="Bold"
+                        Background="#7c3aed" Foreground="White" Padding="12,10"/>
+
             </StackPanel>
 
             <!-- RIGHT SYSTEM RADAR & INSTALLED MOD GRID VIEWER -->
