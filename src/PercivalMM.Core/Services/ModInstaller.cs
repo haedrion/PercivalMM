@@ -1,17 +1,19 @@
 using System;
-using System.IO;
-using System.IO.Compression;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using SharpCompress.Archives;
+using SharpCompress.Common;
 
 namespace PercivalMM.Core.Services
 {
     public class ModInstaller
     {
-        public static void InstallZipMod(string zipPath, string targetGameRootDirectory)
+        public static void InstallZipMod(string archivePath, string targetGameRootDirectory)
         {
-            Console.WriteLine($"\n📦 [PercivalMM] Staging installation archive: {Path.GetFileName(zipPath)}");
+            Console.WriteLine($"\n📦 [PercivalMM] Staging installation archive: {Path.GetFileName(archivePath)}");
 
-            if (!File.Exists(zipPath))
+            if (!File.Exists(archivePath))
             {
                 Console.WriteLine("❌ Error: Downloaded archive file not found.");
                 return;
@@ -24,12 +26,24 @@ namespace PercivalMM.Core.Services
             Directory.CreateDirectory(targetModsDir);
             Directory.CreateDirectory(targetDlcDir);
 
-            string workingBaseDir = Path.GetDirectoryName(zipPath) ?? Path.GetTempPath();
+            string workingBaseDir = Path.GetDirectoryName(archivePath) ?? Path.GetTempPath();
             string tempExtractionPath = Path.Combine(workingBaseDir, "PercivalMM_Temp_" + Guid.NewGuid().ToString());
+            Directory.CreateDirectory(tempExtractionPath);
 
             try
             {
-                ZipFile.ExtractToDirectory(zipPath, tempExtractionPath);
+                // Extract .zip, .rar, or .7z cleanly using SharpCompress
+                using (var archive = ArchiveFactory.OpenArchive(archivePath))
+                {
+                    foreach (var entry in archive.Entries.Where(e => !e.IsDirectory))
+                    {
+                        entry.WriteToDirectory(tempExtractionPath, new ExtractionOptions
+                        {
+                            ExtractFullPath = true,
+                            Overwrite = true
+                        });
+                    }
+                }
 
                 string[] discoveredDirectories = Directory.GetDirectories(tempExtractionPath, "*", SearchOption.AllDirectories);
                 var validModFolders = new List<string>();
@@ -59,7 +73,7 @@ namespace PercivalMM.Core.Services
                 if (validModFolders.Count == 0 && validDlcFolders.Count == 0 && discoveredBinFolder == null)
                 {
                     Console.WriteLine("⚠️ Warning: Archive lacks standard 'mod/dlc' directory formatting.");
-                    string cleanArchiveName = "mod_" + Path.GetFileNameWithoutExtension(zipPath).Replace(" ", "");
+                    string cleanArchiveName = "mod_" + Path.GetFileNameWithoutExtension(archivePath).Replace(" ", "");
                     string fallbackDestination = Path.Combine(targetModsDir, cleanArchiveName);
 
                     if (Directory.Exists(fallbackDestination)) Directory.Delete(fallbackDestination, true);
@@ -89,7 +103,7 @@ namespace PercivalMM.Core.Services
                     Console.WriteLine($"✅ Deployed DLC bundle: {folderName}");
                 }
 
-                // 3. Merge bin/ menu configs -> /bin/ (non-destructive merge!)
+                // 3. Merge bin/ menu configs -> /bin/
                 if (discoveredBinFolder != null)
                 {
                     CopyDirectoryCrossDevice(discoveredBinFolder, targetBinDir);

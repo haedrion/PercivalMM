@@ -29,10 +29,17 @@ public partial class MainWindow : Window
         );
         var suggestedFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(downloadsPath);
 
-        var zipFileType = new FilePickerFileType("Mod Archives")
+                var archiveFileType = new FilePickerFileType("Mod Archives (.zip, .rar, .7z)")
         {
-            Patterns = new[] { "*.zip" },
-            MimeTypes = new[] { "application/zip", "application/x-zip-compressed" }
+            Patterns = new[] { "*.zip", "*.rar", "*.7z" },
+            MimeTypes = new[]
+            {
+                "application/zip",
+                "application/x-zip-compressed",
+                "application/vnd.rar",
+                "application/x-rar-compressed",
+                "application/x-7z-compressed"
+            }
         };
 
         var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
@@ -40,8 +47,9 @@ public partial class MainWindow : Window
             Title = "Select Witcher 3 Mod Archive",
             AllowMultiple = false,
             SuggestedStartLocation = suggestedFolder,
-            FileTypeFilter = new[] { zipFileType }
+            FileTypeFilter = new[] { archiveFileType }
         });
+
 
         var selectedFile = files.FirstOrDefault();
         if (selectedFile == null) return;
