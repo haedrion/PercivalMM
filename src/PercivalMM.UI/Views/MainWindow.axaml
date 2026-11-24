@@ -1,0 +1,152 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:PercivalMM.UI.ViewModels"
+        xmlns:models="using:PercivalMM.Core.Models"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="500"
+        x:Class="PercivalMM.UI.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="Percival Mod Manager (PercivalMM)"
+        Width="950" Height="680"
+        Background="#1e1e24">
+
+        <Design.DataContext>
+        <vm:MainWindowViewModel/>
+    </Design.DataContext>
+
+    <Grid RowDefinitions="Auto, *, Auto" Margin="20">
+        
+        <!-- HEADER LAYER SECTION -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <TextBlock Text="🛡️ PERCIVAL MOD MANAGER" FontSize="26" FontWeight="Bold" Foreground="#f5f5f6"/>
+            <TextBlock Text="Guiding your PC game configurations straight to their Holy Grails" FontSize="12" Foreground="#8a8a93" Margin="0,5,0,0"/>
+            <Separator Background="#2a2a35" Height="1" Margin="0,15,0,0"/>
+        </StackPanel>
+
+        <!-- MAIN ACTIVE WORKSPACE INTERFACE -->
+        <Grid Grid.Row="1" ColumnDefinitions="240, *">
+            
+            <!-- LEFT CONTROL LOG PANEL SIDEBAR -->
+            <StackPanel Grid.Column="0" Spacing="10" Margin="0,0,20,0">
+                <TextBlock Text="Active Game Module" FontWeight="Bold" Foreground="#a1a1aa"/>
+                <Border Background="#2a2a35" CornerRadius="5" Padding="12">
+                    <TextBlock Text="🐺 The Witcher 3: Wild Hunt" FontWeight="SemiBold" Foreground="#38bdf8"/>
+                </Border>
+
+                <Button Content="🔍 Rescan Target Drive" 
+                        Command="{Binding TriggerSSDScanCommand}"
+                        HorizontalAlignment="Stretch" 
+                        HorizontalContentAlignment="Center"
+                        Background="#0284c7" Foreground="White" Padding="10,8" Margin="0,15,0,0"/>
+                
+                <Button Content="📦 Import Mod Archive (.zip)" 
+                        Click="OnImportModClicked"
+                        HorizontalAlignment="Stretch" 
+                        HorizontalContentAlignment="Center"
+                        Background="#22c55e" Foreground="White" Padding="10,8"/>
+            </StackPanel>
+
+            <!-- RIGHT SYSTEM RADAR & INSTALLED MOD GRID VIEWER -->
+            <Border Grid.Column="1" Background="#111115" CornerRadius="8" Padding="20">
+                <Grid RowDefinitions="Auto, Auto, *, Auto, 130">
+                    
+                    <TextBlock Grid.Row="0" Text="📡 Core Storage Detection Radar &amp; Mod Load Order" FontSize="16" FontWeight="SemiBold" Foreground="#f5f5f6" Margin="0,0,0,10"/>
+                    
+                    <Border Grid.Row="1" Background="#1a1a22" BorderBrush="#2a2a35" BorderThickness="1" CornerRadius="5" Padding="12" Margin="0,0,0,12">
+                        <StackPanel Spacing="3">
+                            <TextBlock Text="Detected Target Path Layout:" FontSize="11" Foreground="#71717a"/>
+                            <TextBlock Text="{Binding DiscoveredGamePathText}" FontSize="13" FontWeight="Medium" Foreground="#a7f3d0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                                        <!-- INSTALLED MOD GRID TABLE -->
+                    <Border Grid.Row="2" Background="#09090b" BorderBrush="#2a2a35" BorderThickness="1" CornerRadius="6" Padding="8">
+                        <Grid RowDefinitions="Auto, *">
+                            <!-- Table Column Headers -->
+                            <Grid Grid.Row="0" ColumnDefinitions="65, 60, *, 90, 45" Margin="8,4,8,8">
+                                <TextBlock Grid.Column="0" Text="Active" FontSize="12" FontWeight="Bold" Foreground="#71717a"/>
+                                <TextBlock Grid.Column="1" Text="Rank" FontSize="12" FontWeight="Bold" Foreground="#71717a"/>
+                                <TextBlock Grid.Column="2" Text="Installed Mod Bundle" FontSize="12" FontWeight="Bold" Foreground="#71717a"/>
+                                <TextBlock Grid.Column="3" Text="Priority" FontSize="12" FontWeight="Bold" Foreground="#71717a" HorizontalAlignment="Center"/>
+                                <TextBlock Grid.Column="4" Text="Del" FontSize="12" FontWeight="Bold" Foreground="#71717a" HorizontalAlignment="Center"/>
+                            </Grid>
+
+                            <!-- Scrollable Rows -->
+                            <ScrollViewer Grid.Row="1">
+                                <ItemsControl ItemsSource="{Binding InstalledMods}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="models:InstalledModItem">
+                                            <Border Background="#18181f" CornerRadius="4" Padding="8,6" Margin="0,0,0,4">
+                                                <Grid ColumnDefinitions="65, 60, *, 90, 45">
+                                                    <CheckBox Grid.Column="0"
+                                                              IsChecked="{Binding IsEnabled}"
+                                                              Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ToggleModCommand}"
+                                                              CommandParameter="{Binding}"
+                                                              VerticalAlignment="Center"/>
+                                                    
+                                                    <TextBlock Grid.Column="1"
+                                                               Text="{Binding Priority, StringFormat='#{0}'}"
+                                                               Foreground="#38bdf8"
+                                                               FontWeight="Bold"
+                                                               VerticalAlignment="Center"/>
+
+                                                    <TextBlock Grid.Column="2"
+                                                               Text="{Binding Name}"
+                                                               Foreground="#f5f5f6"
+                                                               FontWeight="Medium"
+                                                               VerticalAlignment="Center"
+                                                               TextTrimming="CharacterEllipsis"/>
+
+                                                    <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" HorizontalAlignment="Center">
+                                                        <Button Content="▲"
+                                                                Padding="6,2"
+                                                                FontSize="10"
+                                                                Background="#2a2a35"
+                                                                Foreground="#e4e4e7"
+                                                                Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).MoveModUpCommand}"
+                                                                CommandParameter="{Binding}"/>
+                                                        <Button Content="▼"
+                                                                Padding="6,2"
+                                                                FontSize="10"
+                                                                Background="#2a2a35"
+                                                                Foreground="#e4e4e7"
+                                                                Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).MoveModDownCommand}"
+                                                                CommandParameter="{Binding}"/>
+                                                    </StackPanel>
+
+                                                    <Button Grid.Column="4"
+                                                            Content="🗑️"
+                                                            Padding="6,2"
+                                                            FontSize="11"
+                                                            Background="#3f1d24"
+                                                            Foreground="#fca5a5"
+                                                            HorizontalAlignment="Center"
+                                                            Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).DeleteModCommand}"
+                                                            CommandParameter="{Binding}"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+
+
+                    <TextBlock Grid.Row="3" Text="Telemetry Engine Log Streams:" FontSize="12" FontWeight="SemiBold" Foreground="#a1a1aa" Margin="0,12,0,4"/>
+                    <ScrollViewer Grid.Row="4" Background="#09090b" Padding="10">
+                        <TextBlock Text="{Binding TelemetryLogStreamText}" FontFamily="Courier New" FontSize="11" Foreground="#a1a1aa"/>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- FOOTER SYSTEM STATUS LAYER SECTION -->
+        <StackPanel Grid.Row="2" Margin="0,15,0,0">
+            <Separator Background="#2a2a35" Height="1" Margin="0,0,0,10"/>
+            <TextBlock Text="🛡️ Open Source CamelotHUB Project Layer" FontSize="11" Foreground="#52525b" HorizontalAlignment="Center"/>
+        </StackPanel>
+        
+    </Grid>
+</Window>
