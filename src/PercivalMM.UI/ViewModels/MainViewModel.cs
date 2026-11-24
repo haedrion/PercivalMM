@@ -143,20 +143,29 @@ namespace PercivalMM.UI.ViewModels
 
             TelemetryLogStreamText += $"\n[Grid Sync] Discovered {InstalledMods.Count} mod bundle(s) for {SelectedGame.GameName}.";
             RunConflictCheck();
-        }
+            SyncActiveGameConfig();
 
+        }       
+               
         private void SyncActiveGameConfig()
         {
             if (IsValheimActive)
             {
-                TelemetryLogStreamText += "\n[BepInEx Sync] Valheim plugin folder state verified.";
+                string launchResult = SteamLaunchOptionsService.ConfigureValheimBepInExLaunchOption(DiscoveredGamePathText);
+                Log($"[BepInEx Sync] {launchResult}");
+
+                foreach (var diag in ValheimHealthCheckService.RunDiagnostics(DiscoveredGamePathText))
+                {
+                    Log(diag);
+                }
             }
             else
             {
                 string syncResult = Witcher3ConfigSync.SyncLoadOrder(DiscoveredGamePathText, InstalledMods);
-                TelemetryLogStreamText += $"\n[Proton Sync] {syncResult}";
+                Log($"[Proton Sync] {syncResult}");
             }
         }
+
 
         private void ExecuteToggleMod(InstalledModItem? mod)
         {
@@ -266,6 +275,12 @@ namespace PercivalMM.UI.ViewModels
                 TelemetryLogStreamText += $"\n❌ [Launcher Error] Failed to trigger Steam: {ex.Message}";
             }
         }
+                
+        private void Log(string message)
+        {
+            TelemetryLogStreamText = $"{message}\n{TelemetryLogStreamText}";
+        }
+
 
         private void RunConflictCheck()
         {

@@ -25,17 +25,22 @@ namespace PercivalMM.Core.Services
 
             try
             {
-                using (var archive = ArchiveFactory.OpenArchive(archivePath))
+                              using (var archive = ArchiveFactory.OpenArchive(archivePath))
                 {
-                    foreach (var entry in archive.Entries.Where(e => !e.IsDirectory))
+                    foreach (var entry in archive.Entries.Where(e => !e.IsDirectory && !string.IsNullOrEmpty(e.Key)))
                     {
-                        entry.WriteToDirectory(tempExtractionPath, new ExtractionOptions
+                        string normalizedRelPath = entry.Key.Replace('\\', '/').TrimStart('/');
+                        string fullDestPath = Path.Combine(tempExtractionPath, normalizedRelPath);
+                        string? destDir = Path.GetDirectoryName(fullDestPath);
+                        if (!string.IsNullOrEmpty(destDir)) Directory.CreateDirectory(destDir);
+
+                        entry.WriteToFile(fullDestPath, new ExtractionOptions
                         {
-                            ExtractFullPath = true,
                             Overwrite = true
                         });
                     }
                 }
+  
 
                 // --- VALHEIM (BepInEx) PIPELINE ---
                 if (gameName.Contains("Valheim", StringComparison.OrdinalIgnoreCase))
@@ -122,32 +127,95 @@ namespace PercivalMM.Core.Services
             }
         }
 
-        private static void InstallValheimArchive(string tempExtractionPath, string archivePath, string targetGameRootDirectory)
+                private static void InstallValheimArchive(string tempExtractionPath, string archivePath, string targetGameRootDirectory)
         {
             string pluginsDir = Path.Combine(targetGameRootDirectory, "BepInEx", "plugins");
             Directory.CreateDirectory(pluginsDir);
 
-            // Check if this archive is BepInExPack itself (contains BepInEx/core)
+            // 1. Unpack nested Vortex .zip/.7z/.rar archives if no top-level .dll exists
+            var innerArchives = Directory.GetFiles(tempExtractionPath, "*.*", SearchOption.AllDirectories)
+                .Where(f => f.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
+                         || f.EndsWith(".7z", StringComparison.OrdinalIgnoreCase)
+                         || f.EndsWith(".rar", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (innerArchives.Count > 0 && Directory.GetFiles(tempExtractionPath, "*.dll", SearchOption.AllDirectories).Length == 0)
+            {
+                string innerExtractDir = Path.Combine(tempExtractionPath, "_inner");
+                Directory.CreateDirectory(innerExtractDir);
+                                foreach (var inner in innerArchives)
+                {
+                    using var subArchive = ArchiveFactory.OpenArchive(inner);
+                    foreach (var entry in subArchive.Entries.Where(e => !e.IsDirectory && !string.IsNullOrEmpty(e.Key)))
+                    {
+                        string normalizedRelPath = entry.Key.Replace('\\', '/').TrimStart('/');
+                        string fullDestPath = Path.Combine(innerExtractDir, normalizedRelPath);
+                        string? destDir = Path.GetDirectoryName(fullDestPath);
+                        if (!string.IsNullOrEmpty(destDir)) Directory.CreateDirectory(destDir);
+
+                        entry.WriteToFile(fullDestPath, new ExtractionOptions
+                        {
+                            Overwrite = true
+                        });
+                    }
+                }
+
+                tempExtractionPath = innerExtractDir;
+            }
+
+            // 2. Detect BepInExPack framework itself (contains BepInEx/core)
             string? bepInExRoot = Directory.GetDirectories(tempExtractionPath, "BepInEx", SearchOption.AllDirectories).FirstOrDefault();
             if (bepInExRoot != null && Directory.Exists(Path.Combine(bepInExRoot, "core")))
             {
                 string parentOfBepInEx = Directory.GetParent(bepInExRoot)!.FullName;
                 CopyDirectoryCrossDevice(parentOfBepInEx, targetGameRootDirectory);
-                Console.WriteLine("✅ Installed BepInEx framework directly into Valheim root!");
+
+                // Automatically mark start_game_bepinex.sh (and any .sh scripts) executable on Linux!
+                if (!OperatingSystem.IsWindows())
+                {
+                    foreach (var shFile in Directory.GetFiles(targetGameRootDirectory, "*.sh"))
+                    {
+                        File.SetUnixFileMode(shFile,
+                            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                            UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+                            UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+                    }
+                }
+
+                Console.WriteLine("✅ Installed BepInEx framework and set executable permissions!");
                 return;
             }
 
-            // Otherwise, package the mod into its own clean subfolder inside BepInEx/plugins/<ModName>
+                        // 3. Strip Vortex's timestamp and ID suffixes cleanly
             string modFolderName = Path.GetFileNameWithoutExtension(archivePath).Replace(" ", "_");
-            string destinationModFolder = Path.Combine(pluginsDir, modFolderName);
+            int zipIndex = modFolderName.IndexOf(".zip", StringComparison.OrdinalIgnoreCase);
+            if (zipIndex > 0) modFolderName = modFolderName.Substring(0, zipIndex);
 
-            // If the zip has a nested "plugins" folder, copy from inside that plugins folder
-            string? nestedPlugins = Directory.GetDirectories(tempExtractionPath, "plugins", SearchOption.AllDirectories).FirstOrDefault();
+            int dateIndex = modFolderName.IndexOf("_202");
+            if (dateIndex > 0) modFolderName = modFolderName.Substring(0, dateIndex);
+
+            // Keep folder names under 30 chars so Proton never hits MAX_PATH
+            if (modFolderName.Length > 30) modFolderName = modFolderName.Substring(0, 30);
+
+            string destinationModFolder = Path.Combine(pluginsDir, modFolderName);
+                    string? nestedPlugins = Directory.GetDirectories(tempExtractionPath, "plugins", SearchOption.AllDirectories).FirstOrDefault();
             string sourcePayload = nestedPlugins ?? tempExtractionPath;
+
+            if (nestedPlugins != null)
+            {
+                var subDirs = Directory.GetDirectories(nestedPlugins);
+                var rootFiles = Directory.GetFiles(nestedPlugins);
+                if (subDirs.Length == 1)
+                {
+                    destinationModFolder = Path.Combine(pluginsDir, Path.GetFileName(subDirs[0]));
+                    sourcePayload = subDirs[0];
+                }
+            }
 
             if (Directory.Exists(destinationModFolder)) Directory.Delete(destinationModFolder, true);
             CopyDirectoryCrossDevice(sourcePayload, destinationModFolder);
-            Console.WriteLine($"✅ Deployed Valheim plugin bundle: {modFolderName}");
+            Console.WriteLine($"✅ Deployed Valheim plugin bundle: {Path.GetFileName(destinationModFolder)}");
+
         }
 
         private static void CopyDirectoryCrossDevice(string sourceDir, string destDir)
