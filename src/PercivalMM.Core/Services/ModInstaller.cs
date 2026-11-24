@@ -9,7 +9,7 @@ namespace PercivalMM.Core.Services
 {
     public class ModInstaller
     {
-        public static void InstallZipMod(string archivePath, string targetGameRootDirectory)
+        public static void InstallZipMod(string archivePath, string targetGameRootDirectory, string gameName = "The Witcher 3: Wild Hunt")
         {
             Console.WriteLine($"\n📦 [PercivalMM] Staging installation archive: {Path.GetFileName(archivePath)}");
 
@@ -19,20 +19,12 @@ namespace PercivalMM.Core.Services
                 return;
             }
 
-            string targetModsDir = Path.Combine(targetGameRootDirectory, "mods");
-            string targetDlcDir = Path.Combine(targetGameRootDirectory, "dlc");
-            string targetBinDir = Path.Combine(targetGameRootDirectory, "bin");
-
-            Directory.CreateDirectory(targetModsDir);
-            Directory.CreateDirectory(targetDlcDir);
-
             string workingBaseDir = Path.GetDirectoryName(archivePath) ?? Path.GetTempPath();
             string tempExtractionPath = Path.Combine(workingBaseDir, "PercivalMM_Temp_" + Guid.NewGuid().ToString());
             Directory.CreateDirectory(tempExtractionPath);
 
             try
             {
-                // Extract .zip, .rar, or .7z cleanly using SharpCompress
                 using (var archive = ArchiveFactory.OpenArchive(archivePath))
                 {
                     foreach (var entry in archive.Entries.Where(e => !e.IsDirectory))
@@ -44,6 +36,21 @@ namespace PercivalMM.Core.Services
                         });
                     }
                 }
+
+                // --- VALHEIM (BepInEx) PIPELINE ---
+                if (gameName.Contains("Valheim", StringComparison.OrdinalIgnoreCase))
+                {
+                    InstallValheimArchive(tempExtractionPath, archivePath, targetGameRootDirectory);
+                    return;
+                }
+
+                // --- THE WITCHER 3 PIPELINE ---
+                string targetModsDir = Path.Combine(targetGameRootDirectory, "mods");
+                string targetDlcDir = Path.Combine(targetGameRootDirectory, "dlc");
+                string targetBinDir = Path.Combine(targetGameRootDirectory, "bin");
+
+                Directory.CreateDirectory(targetModsDir);
+                Directory.CreateDirectory(targetDlcDir);
 
                 string[] discoveredDirectories = Directory.GetDirectories(tempExtractionPath, "*", SearchOption.AllDirectories);
                 var validModFolders = new List<string>();
@@ -69,10 +76,8 @@ namespace PercivalMM.Core.Services
                     }
                 }
 
-                // Fallback Layout: If no standard mod*/dlc*/bin folders exist
                 if (validModFolders.Count == 0 && validDlcFolders.Count == 0 && discoveredBinFolder == null)
                 {
-                    Console.WriteLine("⚠️ Warning: Archive lacks standard 'mod/dlc' directory formatting.");
                     string cleanArchiveName = "mod_" + Path.GetFileNameWithoutExtension(archivePath).Replace(" ", "");
                     string fallbackDestination = Path.Combine(targetModsDir, cleanArchiveName);
 
@@ -81,7 +86,6 @@ namespace PercivalMM.Core.Services
                     return;
                 }
 
-                // 1. Deploy mod* bundles -> /mods/
                 foreach (string sourceFolder in validModFolders)
                 {
                     string folderName = Path.GetFileName(sourceFolder);
@@ -89,10 +93,8 @@ namespace PercivalMM.Core.Services
 
                     if (Directory.Exists(destinationPath)) Directory.Delete(destinationPath, true);
                     CopyDirectoryCrossDevice(sourceFolder, destinationPath);
-                    Console.WriteLine($"✅ Deployed MOD bundle: {folderName}");
                 }
 
-                // 2. Deploy dlc* bundles -> /dlc/
                 foreach (string sourceFolder in validDlcFolders)
                 {
                     string folderName = Path.GetFileName(sourceFolder);
@@ -100,14 +102,11 @@ namespace PercivalMM.Core.Services
 
                     if (Directory.Exists(destinationPath)) Directory.Delete(destinationPath, true);
                     CopyDirectoryCrossDevice(sourceFolder, destinationPath);
-                    Console.WriteLine($"✅ Deployed DLC bundle: {folderName}");
                 }
 
-                // 3. Merge bin/ menu configs -> /bin/
                 if (discoveredBinFolder != null)
                 {
                     CopyDirectoryCrossDevice(discoveredBinFolder, targetBinDir);
-                    Console.WriteLine("✅ Merged custom Mod Menu configuration files into /bin/");
                 }
             }
             catch (Exception ex)
@@ -121,6 +120,34 @@ namespace PercivalMM.Core.Services
                     Directory.Delete(tempExtractionPath, true);
                 }
             }
+        }
+
+        private static void InstallValheimArchive(string tempExtractionPath, string archivePath, string targetGameRootDirectory)
+        {
+            string pluginsDir = Path.Combine(targetGameRootDirectory, "BepInEx", "plugins");
+            Directory.CreateDirectory(pluginsDir);
+
+            // Check if this archive is BepInExPack itself (contains BepInEx/core)
+            string? bepInExRoot = Directory.GetDirectories(tempExtractionPath, "BepInEx", SearchOption.AllDirectories).FirstOrDefault();
+            if (bepInExRoot != null && Directory.Exists(Path.Combine(bepInExRoot, "core")))
+            {
+                string parentOfBepInEx = Directory.GetParent(bepInExRoot)!.FullName;
+                CopyDirectoryCrossDevice(parentOfBepInEx, targetGameRootDirectory);
+                Console.WriteLine("✅ Installed BepInEx framework directly into Valheim root!");
+                return;
+            }
+
+            // Otherwise, package the mod into its own clean subfolder inside BepInEx/plugins/<ModName>
+            string modFolderName = Path.GetFileNameWithoutExtension(archivePath).Replace(" ", "_");
+            string destinationModFolder = Path.Combine(pluginsDir, modFolderName);
+
+            // If the zip has a nested "plugins" folder, copy from inside that plugins folder
+            string? nestedPlugins = Directory.GetDirectories(tempExtractionPath, "plugins", SearchOption.AllDirectories).FirstOrDefault();
+            string sourcePayload = nestedPlugins ?? tempExtractionPath;
+
+            if (Directory.Exists(destinationModFolder)) Directory.Delete(destinationModFolder, true);
+            CopyDirectoryCrossDevice(sourcePayload, destinationModFolder);
+            Console.WriteLine($"✅ Deployed Valheim plugin bundle: {modFolderName}");
         }
 
         private static void CopyDirectoryCrossDevice(string sourceDir, string destDir)

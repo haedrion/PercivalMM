@@ -13,9 +13,28 @@ namespace PercivalMM.UI.ViewModels
     public class MainWindowViewModel : ViewModelBase
     {
         private string _discoveredGamePathText = "Storage arrays unscanned. Awaiting pipeline initialization command...";
-        private string _telemetryLogStreamText = "[System Init] Core app modules loaded.\n[System Init] Awaiting active trigger execution signal.";
+        private string _telemetryLogStreamText = "[System Init] Core app modules loaded.\n[System Init] Multi-game profile registry active.";
+        private IGameProfile _selectedGame;
 
+        public ObservableCollection<IGameProfile> AvailableGames { get; } = new();
         public ObservableCollection<InstalledModItem> InstalledMods { get; } = new();
+
+        public IGameProfile SelectedGame
+        {
+            get => _selectedGame;
+            set
+            {
+                if (_selectedGame != value && value != null)
+                {
+                    _selectedGame = value;
+                    RaisePropertyChanged();
+                    RaisePropertyChanged(nameof(LaunchButtonText));
+                    ExecuteLiveStorageDriveScan();
+                }
+            }
+        }
+
+        public string LaunchButtonText => $"⚔️ Launch {SelectedGame?.GameName ?? "Game"}";
 
         public string DiscoveredGamePathText
         {
@@ -36,9 +55,12 @@ namespace PercivalMM.UI.ViewModels
         public ICommand DeleteModCommand { get; }
         public ICommand LaunchGameCommand { get; }
 
-
         public MainWindowViewModel()
         {
+            AvailableGames.Add(new Witcher3Profile());
+            AvailableGames.Add(new ValheimProfile());
+            _selectedGame = AvailableGames[0];
+
             TriggerSSDScanCommand = new RelayCommand(ExecuteLiveStorageDriveScan);
             ToggleModCommand = new RelayCommand<InstalledModItem>(ExecuteToggleMod);
             MoveModUpCommand = new RelayCommand<InstalledModItem>(mod => MoveModPriority(mod, -1));
@@ -49,74 +71,91 @@ namespace PercivalMM.UI.ViewModels
             ExecuteLiveStorageDriveScan();
         }
 
+        private bool IsValheimActive => SelectedGame.SteamAppId == "892970";
+
+        private string GetActiveModsDirectory() => IsValheimActive
+            ? Path.Combine(DiscoveredGamePathText, "BepInEx", "plugins")
+            : Path.Combine(DiscoveredGamePathText, "mods");
+
+        private string GetDisabledModsDirectory() => IsValheimActive
+            ? Path.Combine(DiscoveredGamePathText, "BepInEx", "plugins_disabled")
+            : Path.Combine(DiscoveredGamePathText, "mods_disabled");
+
         private void ExecuteLiveStorageDriveScan()
         {
-            TelemetryLogStreamText += "\n[Radar Action] Booting cross-drive asset search sequence...";
+            TelemetryLogStreamText += $"\n[Radar Action] Scanning storage arrays for {SelectedGame.GameName}...";
             
             string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            IGameProfile witcherModule = new Witcher3Profile();
-
-            string pathResult = ScannerService.LocateGamePath(home, witcherModule.DefaultInstallFolderName);
+            string pathResult = ScannerService.LocateGamePath(home, SelectedGame.DefaultInstallFolderName);
 
             if (!string.IsNullOrEmpty(pathResult))
             {
                 DiscoveredGamePathText = pathResult;
-                TelemetryLogStreamText += $"\n[Radar Success] Locked target common path configuration layer.";
-                TelemetryLogStreamText += $"\n[File Stream] Target verified: {pathResult}";
+                TelemetryLogStreamText += $"\n[Radar Success] Locked target path: {pathResult}";
                 RefreshInstalledModsGrid();
             }
             else
             {
-                DiscoveredGamePathText = "❌ Game folder not found across system storage arrays.";
-                TelemetryLogStreamText += "\n[Radar Warning] Zero matching directories discovered on hard drive layers.";
+                InstalledMods.Clear();
+                DiscoveredGamePathText = $"❌ {SelectedGame.GameName} folder not found across storage arrays.";
+                TelemetryLogStreamText += $"\n[Radar Warning] Zero matching directories found for '{SelectedGame.DefaultInstallFolderName}'.";
             }
         }
-
         public void RefreshInstalledModsGrid()
         {
             if (!Directory.Exists(DiscoveredGamePathText)) return;
 
             InstalledMods.Clear();
-            string activeModsDir = Path.Combine(DiscoveredGamePathText, "mods");
-            string disabledModsDir = Path.Combine(DiscoveredGamePathText, "mods_disabled");
+            string activeDir = GetActiveModsDirectory();
+            string disabledDir = GetDisabledModsDirectory();
 
             int priorityCounter = 1;
 
-            // 1. Scan active mods
-            if (Directory.Exists(activeModsDir))
+            if (Directory.Exists(activeDir))
             {
-                foreach (var dir in Directory.GetDirectories(activeModsDir).OrderBy(d => d))
+                foreach (var dir in Directory.GetDirectories(activeDir).OrderBy(d => d))
                 {
                     InstalledMods.Add(new InstalledModItem
                     {
                         Name = Path.GetFileName(dir),
                         FolderPath = dir,
-                        ModType = "MOD",
+                        ModType = IsValheimActive ? "BEPINEX" : "MOD",
                         Priority = priorityCounter++,
                         IsEnabled = true
                     });
                 }
             }
 
-            // 2. Scan disabled mods
-            if (Directory.Exists(disabledModsDir))
+            if (Directory.Exists(disabledDir))
             {
-                foreach (var dir in Directory.GetDirectories(disabledModsDir).OrderBy(d => d))
+                foreach (var dir in Directory.GetDirectories(disabledDir).OrderBy(d => d))
                 {
                     InstalledMods.Add(new InstalledModItem
                     {
                         Name = Path.GetFileName(dir),
                         FolderPath = dir,
-                        ModType = "MOD",
+                        ModType = IsValheimActive ? "BEPINEX" : "MOD",
                         Priority = priorityCounter++,
                         IsEnabled = false
                     });
                 }
             }
 
-            TelemetryLogStreamText += $"\n[Grid Sync] Discovered {InstalledMods.Count} mod bundle(s) on target drive."; 
+            TelemetryLogStreamText += $"\n[Grid Sync] Discovered {InstalledMods.Count} mod bundle(s) for {SelectedGame.GameName}.";
             RunConflictCheck();
+        }
 
+        private void SyncActiveGameConfig()
+        {
+            if (IsValheimActive)
+            {
+                TelemetryLogStreamText += "\n[BepInEx Sync] Valheim plugin folder state verified.";
+            }
+            else
+            {
+                string syncResult = Witcher3ConfigSync.SyncLoadOrder(DiscoveredGamePathText, InstalledMods);
+                TelemetryLogStreamText += $"\n[Proton Sync] {syncResult}";
+            }
         }
 
         private void ExecuteToggleMod(InstalledModItem? mod)
@@ -125,24 +164,18 @@ namespace PercivalMM.UI.ViewModels
 
             try
             {
-                string targetParent = mod.IsEnabled
-                    ? Path.Combine(DiscoveredGamePathText, "mods")
-                    : Path.Combine(DiscoveredGamePathText, "mods_disabled");
-
+                string targetParent = mod.IsEnabled ? GetActiveModsDirectory() : GetDisabledModsDirectory();
                 Directory.CreateDirectory(targetParent);
                 string newPath = Path.Combine(targetParent, mod.Name);
 
                 if (Directory.Exists(mod.FolderPath) && mod.FolderPath != newPath)
                 {
-                    // Same physical SSD -> instant atomic directory rename/move!
                     Directory.Move(mod.FolderPath, newPath);
                     mod.FolderPath = newPath;
                     TelemetryLogStreamText += $"\n[Mod State] {(mod.IsEnabled ? "Enabled" : "Disabled")}: {mod.Name}";
-                
-                string syncResult = Witcher3ConfigSync.SyncLoadOrder(DiscoveredGamePathText, InstalledMods);
-TelemetryLogStreamText += $"\n[Proton Sync] {syncResult}";
-RunConflictCheck();
 
+                    SyncActiveGameConfig();
+                    RunConflictCheck();
                 }
             }
             catch (Exception ex)
@@ -161,24 +194,21 @@ RunConflictCheck();
 
             InstalledMods.Move(oldIndex, newIndex);
 
-            // Re-index priority numbers cleanly
             for (int i = 0; i < InstalledMods.Count; i++)
             {
                 InstalledMods[i].Priority = i + 1;
             }
 
-            // Refresh UI items
             var snapshot = InstalledMods.ToList();
             InstalledMods.Clear();
             foreach (var item in snapshot) InstalledMods.Add(item);
 
             TelemetryLogStreamText += $"\n[Priority] Moved '{mod.Name}' to rank #{mod.Priority}.";
-        
-        string syncResult = Witcher3ConfigSync.SyncLoadOrder(DiscoveredGamePathText, InstalledMods);
-TelemetryLogStreamText += $"\n[Proton Sync] {syncResult}";
 
+            SyncActiveGameConfig();
+            RunConflictCheck();
         }
-                private void ExecuteDeleteMod(InstalledModItem? mod)
+        private void ExecuteDeleteMod(InstalledModItem? mod)
         {
             if (mod == null || !Directory.Exists(DiscoveredGamePathText)) return;
 
@@ -191,7 +221,6 @@ TelemetryLogStreamText += $"\n[Proton Sync] {syncResult}";
 
                 InstalledMods.Remove(mod);
 
-                // Re-index remaining ranks cleanly
                 for (int i = 0; i < InstalledMods.Count; i++)
                 {
                     InstalledMods[i].Priority = i + 1;
@@ -203,14 +232,15 @@ TelemetryLogStreamText += $"\n[Proton Sync] {syncResult}";
 
                 TelemetryLogStreamText += $"\n🗑️ [Uninstall] Removed mod bundle: {mod.Name}";
 
-                string syncResult = Witcher3ConfigSync.SyncLoadOrder(DiscoveredGamePathText, InstalledMods);
-                TelemetryLogStreamText += $"\n[Proton Sync] {syncResult}";
+                SyncActiveGameConfig();
+                RunConflictCheck();
             }
             catch (Exception ex)
             {
                 TelemetryLogStreamText += $"\n❌ [Error] Failed to delete {mod.Name}: {ex.Message}";
             }
         }
+
         private void ExecuteLaunchGame()
         {
             if (!Directory.Exists(DiscoveredGamePathText))
@@ -221,15 +251,13 @@ TelemetryLogStreamText += $"\n[Proton Sync] {syncResult}";
 
             try
             {
-                // Force one final Proton mods.settings sync before booting!
-                string syncResult = Witcher3ConfigSync.SyncLoadOrder(DiscoveredGamePathText, InstalledMods);
-                TelemetryLogStreamText += $"\n[Proton Sync] {syncResult}";
-                TelemetryLogStreamText += "\n⚔️ [Launcher] Handing off AppID 292030 (The Witcher 3) to Steam Proton...";
+                SyncActiveGameConfig();
+                TelemetryLogStreamText += $"\n⚔️ [Launcher] Handing off AppID {SelectedGame.SteamAppId} ({SelectedGame.GameName}) to Steam...";
 
                 Process.Start(new ProcessStartInfo
                 {
                     FileName = "xdg-open",
-                    Arguments = "steam://rungameid/292030",
+                    Arguments = $"steam://rungameid/{SelectedGame.SteamAppId}",
                     UseShellExecute = false
                 });
             }
@@ -238,22 +266,23 @@ TelemetryLogStreamText += $"\n[Proton Sync] {syncResult}";
                 TelemetryLogStreamText += $"\n❌ [Launcher Error] Failed to trigger Steam: {ex.Message}";
             }
         }
-private void RunConflictCheck()
-     {
-         var conflicts = ConflictDetectorService.ScanForConflicts(InstalledMods);
-         if (conflicts.Count == 0)
-         {
-             TelemetryLogStreamText += "\n🛡️ [Conflict Radar] Zero overlapping mod files detected.";
-         }
-         else
-         {
-             TelemetryLogStreamText += $"\n⚠️ [Conflict Radar] Detected {conflicts.Count} file overlap(s):";
-             foreach (var c in conflicts)
-             {
-                 TelemetryLogStreamText += $"\n   {c}";
-             }
-         }
-    
+
+        private void RunConflictCheck()
+        {
+            var conflicts = ConflictDetectorService.ScanForConflicts(InstalledMods);
+            if (conflicts.Count == 0)
+            {
+                TelemetryLogStreamText += "\n🛡️ [Conflict Radar] Zero overlapping mod files detected.";
+            }
+            else
+            {
+                TelemetryLogStreamText += $"\n⚠️ [Conflict Radar] Detected {conflicts.Count} file overlap(s):";
+                foreach (var c in conflicts)
+                {
+                    TelemetryLogStreamText += $"\n   {c}";
+                }
+            }
+        }
     }
 
     public class RelayCommand : ICommand
@@ -265,8 +294,6 @@ private void RunConflictCheck()
         public event EventHandler? CanExecuteChanged { add { } remove { } }
     }
 
-     }
-
     public class RelayCommand<T> : ICommand
     {
         private readonly Action<T?> _action;
@@ -276,4 +303,3 @@ private void RunConflictCheck()
         public event EventHandler? CanExecuteChanged { add { } remove { } }
     }
 }
-

@@ -29,7 +29,7 @@ public partial class MainWindow : Window
         );
         var suggestedFolder = await topLevel.StorageProvider.TryGetFolderFromPathAsync(downloadsPath);
 
-                var archiveFileType = new FilePickerFileType("Mod Archives (.zip, .rar, .7z)")
+        var archiveFileType = new FilePickerFileType("Mod Archives (.zip, .rar, .7z)")
         {
             Patterns = new[] { "*.zip", "*.rar", "*.7z" },
             MimeTypes = new[]
@@ -44,12 +44,11 @@ public partial class MainWindow : Window
 
         var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "Select Witcher 3 Mod Archive",
+            Title = "Select Mod Archive",
             AllowMultiple = false,
             SuggestedStartLocation = suggestedFolder,
             FileTypeFilter = new[] { archiveFileType }
         });
-
 
         var selectedFile = files.FirstOrDefault();
         if (selectedFile == null) return;
@@ -57,11 +56,13 @@ public partial class MainWindow : Window
         // Extract the local filesystem path (e.g. /home/haedrion/Downloads/mod.zip)
         string zipPath = selectedFile.Path.LocalPath;
 
-                var vm = DataContext as MainWindowViewModel;
+        var vm = DataContext as MainWindowViewModel;
         string? scannedPath = vm?.DiscoveredGamePathText;
         string gameRootPath = (!string.IsNullOrWhiteSpace(scannedPath) && Directory.Exists(scannedPath))
             ? scannedPath
             : "/media/Haedrion/GamingSSD/SteamLibrary/steamapps/common/The Witcher 3";
+
+        string activeGameName = vm?.SelectedGame?.GameName ?? "The Witcher 3: Wild Hunt";
 
         if (sender is Button btn) btn.IsEnabled = false;
 
@@ -73,7 +74,7 @@ public partial class MainWindow : Window
             // Run your static cross-device installer on a background thread
             await Task.Run(() =>
             {
-                ModInstaller.InstallZipMod(zipPath, gameRootPath);
+                ModInstaller.InstallZipMod(zipPath, gameRootPath, activeGameName);
             });
 
             if (vm != null)
