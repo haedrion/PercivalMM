@@ -59,6 +59,9 @@ namespace PercivalMM.UI.ViewModels
         {
             AvailableGames.Add(new Witcher3Profile());
             AvailableGames.Add(new ValheimProfile());
+            AvailableGames.Add(new NoMansSkyProfile());
+            AvailableGames.Add(new Expedition33Profile());
+
             _selectedGame = AvailableGames[0];
 
             TriggerSSDScanCommand = new RelayCommand(ExecuteLiveStorageDriveScan);
@@ -72,14 +75,25 @@ namespace PercivalMM.UI.ViewModels
         }
 
         private bool IsValheimActive => SelectedGame.SteamAppId == "892970";
+        private bool IsNoMansSkyActive => SelectedGame.SteamAppId == "275850";
+        private bool IsExpedition33Active => SelectedGame.SteamAppId == "1903340";
 
-        private string GetActiveModsDirectory() => IsValheimActive
-            ? Path.Combine(DiscoveredGamePathText, "BepInEx", "plugins")
-            : Path.Combine(DiscoveredGamePathText, "mods");
+        private string GetActiveModsDirectory()
+        {
+            if (IsValheimActive) return Path.Combine(DiscoveredGamePathText, "BepInEx", "plugins");
+            if (IsNoMansSkyActive) return Path.Combine(DiscoveredGamePathText, "GAMEDATA", "MODS");
+            if (IsExpedition33Active) return Path.Combine(DiscoveredGamePathText, "Sandfall", "Content", "Paks", "~mods");
+            if (IsExpedition33Active) return Path.Combine(DiscoveredGamePathText, "Sandfall", "Content", "Paks", "~mods_disabled");
+            return Path.Combine(DiscoveredGamePathText, "mods");
+        }
 
-        private string GetDisabledModsDirectory() => IsValheimActive
-            ? Path.Combine(DiscoveredGamePathText, "BepInEx", "plugins_disabled")
-            : Path.Combine(DiscoveredGamePathText, "mods_disabled");
+        private string GetDisabledModsDirectory()
+        {
+            if (IsValheimActive) return Path.Combine(DiscoveredGamePathText, "BepInEx", "plugins_disabled");
+            if (IsNoMansSkyActive) return Path.Combine(DiscoveredGamePathText, "GAMEDATA", "MODS_DISABLED");
+            return Path.Combine(DiscoveredGamePathText, "mods_disabled");
+        }
+
 
         private void ExecuteLiveStorageDriveScan()
         {
@@ -119,7 +133,7 @@ namespace PercivalMM.UI.ViewModels
                     {
                         Name = Path.GetFileName(dir),
                         FolderPath = dir,
-                        ModType = IsValheimActive ? "BEPINEX" : "MOD",
+                        ModType = IsValheimActive ? "BEPINEX" : (IsNoMansSkyActive ? "NMS" : "MOD"),
                         Priority = priorityCounter++,
                         IsEnabled = true
                     });
@@ -134,7 +148,7 @@ namespace PercivalMM.UI.ViewModels
                     {
                         Name = Path.GetFileName(dir),
                         FolderPath = dir,
-                        ModType = IsValheimActive ? "BEPINEX" : "MOD",
+                        ModType = IsValheimActive ? "BEPINEX" : (IsNoMansSkyActive ? "NMS" : "MOD"),
                         Priority = priorityCounter++,
                         IsEnabled = false
                     });
@@ -159,12 +173,26 @@ namespace PercivalMM.UI.ViewModels
                     Log(diag);
                 }
             }
+            else if (IsNoMansSkyActive)
+            {
+                var modList = InstalledMods.Select(m => new ModInfo
+                {
+                    Name = m.Name,
+                    Priority = m.Priority,
+                    IsEnabled = m.IsEnabled
+                }).ToList();
+
+                string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                SelectedGame.SaveConfiguration(modList, DiscoveredGamePathText, home);
+                Log("[NMS Sync] GCMODSETTINGS.MXML load order and enabled state synced.");
+            }
             else
             {
                 string syncResult = Witcher3ConfigSync.SyncLoadOrder(DiscoveredGamePathText, InstalledMods);
                 Log($"[Proton Sync] {syncResult}");
             }
         }
+
 
 
         private void ExecuteToggleMod(InstalledModItem? mod)
