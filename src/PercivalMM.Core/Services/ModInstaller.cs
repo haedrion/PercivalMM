@@ -200,6 +200,26 @@ namespace PercivalMM.Core.Services
                 Console.WriteLine("✅ Installed BepInEx framework and set executable permissions!");
                 return;
             }
+            
+            // 2.5 Detect Valheim Texture / Asset Packs (valheim_Data/*.assets or CustomTextures/)
+            if (ValheimAssetPackService.IsValheimTextureAssetPack(tempExtractionPath))
+            {
+                string packName = Path.GetFileNameWithoutExtension(archivePath).Replace(" ", "_");
+                int zipIdx = packName.IndexOf(".zip", StringComparison.OrdinalIgnoreCase);
+                if (zipIdx > 0) packName = packName.Substring(0, zipIdx);
+                int dateIdx = packName.IndexOf("_202");
+                if (dateIdx > 0) packName = packName.Substring(0, dateIdx);
+
+                string stagingPackDir = ValheimAssetPackService.GetStagingPackDirectory(targetGameRootDirectory, packName);
+                if (Directory.Exists(stagingPackDir)) Directory.Delete(stagingPackDir, true);
+
+                CopyDirectoryCrossDevice(tempExtractionPath, stagingPackDir);
+                ValheimAssetPackService.NormalizeStagedPackLayout(stagingPackDir);
+                File.WriteAllText(Path.Combine(stagingPackDir, ".percival_tier"), "Assets");
+
+                Console.WriteLine($"🎨 Staged Valheim HD Texture / Asset Pack: {packName}");
+                return;
+            }
 
                         // 3. Strip Vortex's timestamp and ID suffixes cleanly
             string modFolderName = Path.GetFileNameWithoutExtension(archivePath).Replace(" ", "_");

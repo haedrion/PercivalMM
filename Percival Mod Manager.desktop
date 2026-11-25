@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Percival Mod Manager
+Comment=Linux Mint Multi-Game Mod Manager
+Exec=/home/haedrion/Documents/CamelotHUB/PercivalMM/publish/PercivalMM.UI
+Icon=/home/haedrion/Documents/CamelotHUB/PercivalMM/src/PercivalMM.UI/Assets/percival-icon.svg
+Path=/home/haedrion/Documents/CamelotHUB/PercivalMM/publish
+Terminal=false
+Categories=Game;Utility;
