@@ -18,11 +18,42 @@
     <Grid RowDefinitions="Auto, *, Auto" Margin="20">
         
         <!-- HEADER LAYER SECTION -->
-        <StackPanel Grid.Row="0" Margin="0,0,0,20">
-            <TextBlock Text="🛡️ PERCIVAL MOD MANAGER" FontSize="26" FontWeight="Bold" Foreground="#f5f5f6"/>
-            <TextBlock Text="Guiding your PC game configurations straight to their Holy Grails" FontSize="12" Foreground="#8a8a93" Margin="0,5,0,0"/>
-            <Separator Background="#2a2a35" Height="1" Margin="0,15,0,0"/>
-        </StackPanel>
+                <Grid Grid.Row="0" Margin="0,0,0,18">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left Title & Tagline -->
+            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,14">
+                <TextBlock Text="🛡️ PERCIVAL MOD MANAGER" FontSize="26" FontWeight="Bold" Foreground="#f5f5f6"/>
+                <TextBlock Text="Guiding your PC game configurations straight to their Holy Grails" FontSize="12" Foreground="#8a8a93" Margin="0,5,0,0"/>
+            </StackPanel>
+
+            <!-- Top-Right Flush Banner: touches top-right window corner & grey divider line -->
+            <Image Grid.Column="1"
+                   Source="{Binding ActiveGameBanner}"
+                   HorizontalAlignment="Right"
+                   VerticalAlignment="Stretch"
+                   Stretch="UniformToFill"
+                   Margin="0,-20,-20,1">
+                <Image.OpacityMask>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                        <GradientStop Color="Transparent" Offset="0.0"/>
+                        <GradientStop Color="Black" Offset="0.25"/>
+                        <GradientStop Color="Black" Offset="1.0"/>
+                    </LinearGradientBrush>
+                </Image.OpacityMask>
+            </Image>
+
+            <!-- Bottom Header Divider Line -->
+            <Separator Grid.ColumnSpan="2" VerticalAlignment="Bottom" Background="#2a2a35" Height="1" Margin="0,0,-20,0"/>
+        </Grid>
+
+ 
+
+         
+
 
         <!-- MAIN ACTIVE WORKSPACE INTERFACE -->
         <Grid Grid.Row="1" ColumnDefinitions="240, *">
@@ -64,7 +95,7 @@
                         HorizontalAlignment="Stretch" 
                         HorizontalContentAlignment="Center"
                         FontWeight="Bold"
-                        Background="#7c3aed" Foreground="White" Padding="12,10"/>
+                        Background="#E54E00" Foreground="White" Padding="12,10"/>
 
             </StackPanel>
 
@@ -72,7 +103,7 @@
             <Border Grid.Column="1" Background="#111115" CornerRadius="8" Padding="20">
                 <Grid RowDefinitions="Auto, Auto, *, Auto, 130">
                     
-                    <TextBlock Grid.Row="0" Text="📡 Core Storage Detection Radar &amp; Mod Load Order" FontSize="16" FontWeight="SemiBold" Foreground="#f5f5f6" Margin="0,0,0,10"/>
+                    <TextBlock Grid.Row="0" Text="📡 Core Storage Detection Radar &amp; Mod Load Order" FontSize="16" FontWeight="SemiBold" Foreground="#f5f5f6" Margin="0,0,0,10"/> 
                     
                     <Border Grid.Row="1" Background="#1a1a22" BorderBrush="#2a2a35" BorderThickness="1" CornerRadius="5" Padding="12" Margin="0,0,0,12">
                         <StackPanel Spacing="3">

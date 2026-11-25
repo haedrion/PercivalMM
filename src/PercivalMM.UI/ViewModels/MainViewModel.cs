@@ -7,6 +7,9 @@ using System.Windows.Input;
 using PercivalMM.Core.Games;
 using PercivalMM.Core.Models;
 using PercivalMM.Core.Services;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
+
 
 namespace PercivalMM.UI.ViewModels
 {
@@ -29,12 +32,50 @@ namespace PercivalMM.UI.ViewModels
                     _selectedGame = value;
                     RaisePropertyChanged();
                     RaisePropertyChanged(nameof(LaunchButtonText));
+                    RaisePropertyChanged(nameof(ActiveGameBanner));
+
                     ExecuteLiveStorageDriveScan();
                 }
             }
         }
 
-        public string LaunchButtonText => $"⚔️ Launch {SelectedGame?.GameName ?? "Game"}";
+        public string LaunchButtonText => SelectedGame?.SteamAppId switch
+{
+    "292030" => "⚔️ Launch Witcher 3",
+    "892970" => "⚔️ Launch Valheim",
+    "275850" => "⚔️ Launch No Man's Sky",
+    "1903340" => "⚔️ Launch Expedition 33",
+    _ => "⚔️ Launch Game"
+};
+
+
+   public Bitmap? ActiveGameBanner
+   {
+       get
+       {
+           string fileName = SelectedGame?.SteamAppId switch
+           {
+               "292030" => "witcher3.png",
+               "892970" => "valheim.png",
+               "275850" => "nms.png",
+               "1903340" => "expedition33.png",
+               _ => "witcher3.png"
+           };
+
+           try
+           {
+               var uri = new Uri($"avares://PercivalMM.UI/Assets/Banners/{fileName}");
+               if (AssetLoader.Exists(uri))
+               {
+                   return new Bitmap(AssetLoader.Open(uri));
+               }
+           }
+           catch { }
+
+           return null;
+       }
+   }
+
 
         public string DiscoveredGamePathText
         {
