@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using PercivalMM.Core.Models;
 using SharpCompress.Archives;
 using SharpCompress.Common;
 
@@ -25,22 +26,47 @@ namespace PercivalMM.Core.Services
 
             try
             {
-                              using (var archive = ArchiveFactory.OpenArchive(archivePath))
+                if (archivePath.EndsWith(".7z", StringComparison.OrdinalIgnoreCase) && File.Exists("/usr/bin/7z"))
                 {
-                    foreach (var entry in archive.Entries.Where(e => !e.IsDirectory && !string.IsNullOrEmpty(e.Key)))
+                    var psi = new System.Diagnostics.ProcessStartInfo
                     {
-                        string normalizedRelPath = entry.Key.Replace('\\', '/').TrimStart('/');
-                        string fullDestPath = Path.Combine(tempExtractionPath, normalizedRelPath);
-                        string? destDir = Path.GetDirectoryName(fullDestPath);
-                        if (!string.IsNullOrEmpty(destDir)) Directory.CreateDirectory(destDir);
+                        FileName = "/usr/bin/7z",
+                        Arguments = $"x \"{archivePath}\" -o\"{tempExtractionPath}\" -y",
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
 
-                        entry.WriteToFile(fullDestPath, new ExtractionOptions
+                    using var proc = System.Diagnostics.Process.Start(psi);
+                    if (proc != null)
+                    {
+                        proc.WaitForExit();
+                        if (proc.ExitCode != 0)
                         {
-                            Overwrite = true
-                        });
+                            string err = proc.StandardError.ReadToEnd();
+                            throw new Exception($"Native 7z extraction failed (exit {proc.ExitCode}): {err}");
+                        }
                     }
                 }
+                else
+                {
+                    using (var archive = ArchiveFactory.OpenArchive(archivePath))
+                    {
+                        foreach (var entry in archive.Entries.Where(e => !e.IsDirectory && !string.IsNullOrEmpty(e.Key)))
+                        {
+                            string normalizedRelPath = entry.Key.Replace('\\', '/').TrimStart('/');
+                            string fullDestPath = Path.Combine(tempExtractionPath, normalizedRelPath);
+                            string? destDir = Path.GetDirectoryName(fullDestPath);
+                            if (!string.IsNullOrEmpty(destDir)) Directory.CreateDirectory(destDir);
 
+                            entry.WriteToFile(fullDestPath, new ExtractionOptions
+                            {
+                                Overwrite = true
+                            });
+                        }
+                    }
+                }
 
                 // --- VALHEIM (BepInEx) PIPELINE ---
                 if (gameName.Contains("Valheim", StringComparison.OrdinalIgnoreCase))
@@ -63,71 +89,15 @@ namespace PercivalMM.Core.Services
                     return;
                 }
 
-
-                // --- THE WITCHER 3 PIPELINE ---
-                string targetModsDir = Path.Combine(targetGameRootDirectory, "mods");
-                string targetDlcDir = Path.Combine(targetGameRootDirectory, "dlc");
-                string targetBinDir = Path.Combine(targetGameRootDirectory, "bin");
-
-                Directory.CreateDirectory(targetModsDir);
-                Directory.CreateDirectory(targetDlcDir);
-
-                string[] discoveredDirectories = Directory.GetDirectories(tempExtractionPath, "*", SearchOption.AllDirectories);
-                var validModFolders = new List<string>();
-                var validDlcFolders = new List<string>();
-                string? discoveredBinFolder = null;
-
-                foreach (var dir in discoveredDirectories)
+                // --- DIVINITY: ORIGINAL SIN 2 DEFINITIVE EDITION PIPELINE ---
+                if (gameName.Contains("Divinity", StringComparison.OrdinalIgnoreCase))
                 {
-                    string folderName = Path.GetFileName(dir);
-                    string lowerName = folderName.ToLower();
-
-                    if (lowerName != "mods" && lowerName.StartsWith("mod"))
-                    {
-                        validModFolders.Add(dir);
-                    }
-                    else if (lowerName != "dlc" && lowerName.StartsWith("dlc"))
-                    {
-                        validDlcFolders.Add(dir);
-                    }
-                    else if (lowerName == "bin" && discoveredBinFolder == null)
-                    {
-                        discoveredBinFolder = dir;
-                    }
-                }
-
-                if (validModFolders.Count == 0 && validDlcFolders.Count == 0 && discoveredBinFolder == null)
-                {
-                    string cleanArchiveName = "mod_" + Path.GetFileNameWithoutExtension(archivePath).Replace(" ", "");
-                    string fallbackDestination = Path.Combine(targetModsDir, cleanArchiveName);
-
-                    if (Directory.Exists(fallbackDestination)) Directory.Delete(fallbackDestination, true);
-                    CopyDirectoryCrossDevice(tempExtractionPath, fallbackDestination);
+                    InstallDivinityOS2Archive(tempExtractionPath, archivePath, targetGameRootDirectory, gameName);
                     return;
                 }
 
-                foreach (string sourceFolder in validModFolders)
-                {
-                    string folderName = Path.GetFileName(sourceFolder);
-                    string destinationPath = Path.Combine(targetModsDir, folderName);
-
-                    if (Directory.Exists(destinationPath)) Directory.Delete(destinationPath, true);
-                    CopyDirectoryCrossDevice(sourceFolder, destinationPath);
-                }
-
-                foreach (string sourceFolder in validDlcFolders)
-                {
-                    string folderName = Path.GetFileName(sourceFolder);
-                    string destinationPath = Path.Combine(targetDlcDir, folderName);
-
-                    if (Directory.Exists(destinationPath)) Directory.Delete(destinationPath, true);
-                    CopyDirectoryCrossDevice(sourceFolder, destinationPath);
-                }
-
-                if (discoveredBinFolder != null)
-                {
-                    CopyDirectoryCrossDevice(discoveredBinFolder, targetBinDir);
-                }
+                // --- THE WITCHER 3 CONTAINER PIPELINE ---
+                InstallWitcher3Archive(tempExtractionPath, archivePath, targetGameRootDirectory, gameName);
             }
             catch (Exception ex)
             {
@@ -141,13 +111,72 @@ namespace PercivalMM.Core.Services
                 }
             }
         }
-
-                private static void InstallValheimArchive(string tempExtractionPath, string archivePath, string targetGameRootDirectory)
+        private static void InstallWitcher3Archive(string tempExtractionPath, string archivePath, string targetGameRootDirectory, string gameName)
         {
-            string pluginsDir = Path.Combine(targetGameRootDirectory, "BepInEx", "plugins");
-            Directory.CreateDirectory(pluginsDir);
+            string displayName = ModContainerService.CleanArchiveDisplayName(archivePath);
+            string containerDir = ModContainerService.GetContainerDirectory(targetGameRootDirectory, displayName);
+            if (Directory.Exists(containerDir)) Directory.Delete(containerDir, true);
 
-            // 1. Unpack nested Vortex .zip/.7z/.rar archives if no top-level .dll exists
+            string containerModsDir = Path.Combine(containerDir, "mods");
+            string containerDlcDir = Path.Combine(containerDir, "dlc");
+            string containerBinDir = Path.Combine(containerDir, "bin");
+
+            string[] discoveredDirectories = Directory.GetDirectories(tempExtractionPath, "*", SearchOption.AllDirectories);
+            var validModFolders = new List<string>();
+            var validDlcFolders = new List<string>();
+            string? discoveredBinFolder = null;
+
+            foreach (var dir in discoveredDirectories)
+            {
+                string folderName = Path.GetFileName(dir);
+                string lowerName = folderName.ToLowerInvariant();
+
+                if (lowerName != "mods" && lowerName.StartsWith("mod"))
+                    validModFolders.Add(dir);
+                else if (lowerName != "dlc" && lowerName.StartsWith("dlc"))
+                    validDlcFolders.Add(dir);
+                else if (lowerName == "bin" && discoveredBinFolder == null)
+                    discoveredBinFolder = dir;
+            }
+
+            if (validModFolders.Count == 0 && validDlcFolders.Count == 0 && discoveredBinFolder == null)
+            {
+                string cleanModFolder = "mod_" + ModContainerService.SanitizeName(displayName).Replace("_", "");
+                CopyDirectoryCrossDevice(tempExtractionPath, Path.Combine(containerModsDir, cleanModFolder));
+            }
+            else
+            {
+                foreach (string sourceFolder in validModFolders)
+                {
+                    string folderName = Path.GetFileName(sourceFolder);
+                    CopyDirectoryCrossDevice(sourceFolder, Path.Combine(containerModsDir, folderName));
+                }
+
+                foreach (string sourceFolder in validDlcFolders)
+                {
+                    string folderName = Path.GetFileName(sourceFolder);
+                    CopyDirectoryCrossDevice(sourceFolder, Path.Combine(containerDlcDir, folderName));
+                }
+
+                if (discoveredBinFolder != null)
+                {
+                    CopyDirectoryCrossDevice(discoveredBinFolder, containerBinDir);
+                }
+            }
+
+            bool isAssetOnly = validModFolders.Count == 0 && validDlcFolders.Count > 0;
+            var manifest = new ModContainerManifest
+            {
+                DisplayName = displayName,
+                GameName = gameName,
+                Tier = isAssetOnly ? ModTier.Assets : ModTier.Core,
+                IsEnabled = true
+            };
+            ModContainerService.SaveManifest(containerDir, manifest);
+            Console.WriteLine($"✅ Staged Witcher 3 container '{displayName}' ({validModFolders.Count} mod, {validDlcFolders.Count} dlc).");
+        }
+        private static void InstallValheimArchive(string tempExtractionPath, string archivePath, string targetGameRootDirectory)
+        {
             var innerArchives = Directory.GetFiles(tempExtractionPath, "*.*", SearchOption.AllDirectories)
                 .Where(f => f.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
                          || f.EndsWith(".7z", StringComparison.OrdinalIgnoreCase)
@@ -158,7 +187,7 @@ namespace PercivalMM.Core.Services
             {
                 string innerExtractDir = Path.Combine(tempExtractionPath, "_inner");
                 Directory.CreateDirectory(innerExtractDir);
-                                foreach (var inner in innerArchives)
+                foreach (var inner in innerArchives)
                 {
                     using var subArchive = ArchiveFactory.OpenArchive(inner);
                     foreach (var entry in subArchive.Entries.Where(e => !e.IsDirectory && !string.IsNullOrEmpty(e.Key)))
@@ -178,14 +207,12 @@ namespace PercivalMM.Core.Services
                 tempExtractionPath = innerExtractDir;
             }
 
-            // 2. Detect BepInExPack framework itself (contains BepInEx/core)
             string? bepInExRoot = Directory.GetDirectories(tempExtractionPath, "BepInEx", SearchOption.AllDirectories).FirstOrDefault();
             if (bepInExRoot != null && Directory.Exists(Path.Combine(bepInExRoot, "core")))
             {
                 string parentOfBepInEx = Directory.GetParent(bepInExRoot)!.FullName;
                 CopyDirectoryCrossDevice(parentOfBepInEx, targetGameRootDirectory);
 
-                // Automatically mark start_game_bepinex.sh (and any .sh scripts) executable on Linux!
                 if (!OperatingSystem.IsWindows())
                 {
                     foreach (var shFile in Directory.GetFiles(targetGameRootDirectory, "*.sh"))
@@ -200,8 +227,7 @@ namespace PercivalMM.Core.Services
                 Console.WriteLine("✅ Installed BepInEx framework and set executable permissions!");
                 return;
             }
-            
-            // 2.5 Detect Valheim Texture / Asset Packs (valheim_Data/*.assets or CustomTextures/)
+
             if (ValheimAssetPackService.IsValheimTextureAssetPack(tempExtractionPath))
             {
                 string packName = Path.GetFileNameWithoutExtension(archivePath).Replace(" ", "_");
@@ -221,71 +247,90 @@ namespace PercivalMM.Core.Services
                 return;
             }
 
-                        // 3. Strip Vortex's timestamp and ID suffixes cleanly
-            string modFolderName = Path.GetFileNameWithoutExtension(archivePath).Replace(" ", "_");
-            int zipIndex = modFolderName.IndexOf(".zip", StringComparison.OrdinalIgnoreCase);
-            if (zipIndex > 0) modFolderName = modFolderName.Substring(0, zipIndex);
+            string displayName = ModContainerService.CleanArchiveDisplayName(archivePath);
+            string containerDir = ModContainerService.GetContainerDirectory(targetGameRootDirectory, displayName);
+            if (Directory.Exists(containerDir)) Directory.Delete(containerDir, true);
 
-            int dateIndex = modFolderName.IndexOf("_202");
-            if (dateIndex > 0) modFolderName = modFolderName.Substring(0, dateIndex);
-
-            // Keep folder names under 30 chars so Proton never hits MAX_PATH
+            string modFolderName = ModContainerService.SanitizeName(displayName);
             if (modFolderName.Length > 30) modFolderName = modFolderName.Substring(0, 30);
 
-            string destinationModFolder = Path.Combine(pluginsDir, modFolderName);
-                    string? nestedPlugins = Directory.GetDirectories(tempExtractionPath, "plugins", SearchOption.AllDirectories).FirstOrDefault();
+            string? nestedPlugins = Directory.GetDirectories(tempExtractionPath, "plugins", SearchOption.AllDirectories).FirstOrDefault();
             string sourcePayload = nestedPlugins ?? tempExtractionPath;
 
             if (nestedPlugins != null)
             {
                 var subDirs = Directory.GetDirectories(nestedPlugins);
-                var rootFiles = Directory.GetFiles(nestedPlugins);
                 if (subDirs.Length == 1)
                 {
-                    destinationModFolder = Path.Combine(pluginsDir, Path.GetFileName(subDirs[0]));
+                    modFolderName = Path.GetFileName(subDirs[0]);
                     sourcePayload = subDirs[0];
                 }
             }
 
-            if (Directory.Exists(destinationModFolder)) Directory.Delete(destinationModFolder, true);
-            CopyDirectoryCrossDevice(sourcePayload, destinationModFolder);
-            Console.WriteLine($"✅ Deployed Valheim plugin bundle: {Path.GetFileName(destinationModFolder)}");
+            string containerPluginDest = Path.Combine(containerDir, "BepInEx", "plugins", modFolderName);
+            CopyDirectoryCrossDevice(sourcePayload, containerPluginDest);
 
+            ModContainerService.SaveManifest(containerDir, new ModContainerManifest
+            {
+                DisplayName = displayName,
+                GameName = "Valheim",
+                Tier = ModTier.Core,
+                IsEnabled = true
+            });
+            Console.WriteLine($"✅ Staged Valheim plugin container: {displayName}");
         }
-        private static void InstallNoMansSkyArchive(string tempExtractionPath, string archivePath, string targetGameRootDirectory)
+                private static void InstallNoMansSkyArchive(string tempExtractionPath, string archivePath, string targetGameRootDirectory)
         {
-            string nmsModsDir = Path.Combine(targetGameRootDirectory, "GAMEDATA", "MODS");
-            Directory.CreateDirectory(nmsModsDir);
+            string displayName = ModContainerService.CleanArchiveDisplayName(archivePath);
+            string containerDir = ModContainerService.GetContainerDirectory(targetGameRootDirectory, displayName);
+            if (Directory.Exists(containerDir)) Directory.Delete(containerDir, true);
 
-            string modFolderName = Path.GetFileNameWithoutExtension(archivePath).Replace(" ", "_");
-            int dateIndex = modFolderName.IndexOf("_202");
-            if (dateIndex > 0) modFolderName = modFolderName.Substring(0, dateIndex);
-
+            string modFolderName = ModContainerService.SanitizeName(displayName);
             string? nestedMods = Directory.GetDirectories(tempExtractionPath, "MODS", SearchOption.AllDirectories).FirstOrDefault();
             string sourcePayload = nestedMods ?? tempExtractionPath;
 
+            // Unwrap single inner mod folder even if author included README.txt / preview images alongside it
             var subDirs = Directory.GetDirectories(sourcePayload);
-            var rootFiles = Directory.GetFiles(sourcePayload);
-            if (subDirs.Length == 1 && rootFiles.Length == 0)
+            var nonDocFiles = Directory.GetFiles(sourcePayload)
+                .Where(f => !f.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
+                         && !f.EndsWith(".md", StringComparison.OrdinalIgnoreCase)
+                         && !f.EndsWith(".url", StringComparison.OrdinalIgnoreCase)
+                         && !f.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+                         && !f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+
+            if (subDirs.Length == 1 && nonDocFiles.Length == 0)
             {
                 modFolderName = Path.GetFileName(subDirs[0]);
                 sourcePayload = subDirs[0];
             }
 
-            string destinationPath = Path.Combine(nmsModsDir, modFolderName);
-            if (Directory.Exists(destinationPath)) Directory.Delete(destinationPath, true);
-            CopyDirectoryCrossDevice(sourcePayload, destinationPath);
-            Console.WriteLine($"✅ Deployed No Man's Sky mod bundle: {modFolderName}");
+            // Detect legacy pre-Worlds single .pak mods so user knows why NMS might skip them
+            var pakFiles = Directory.GetFiles(sourcePayload, "*.pak", SearchOption.AllDirectories);
+            var mbinFiles = Directory.GetFiles(sourcePayload, "*.mbin", SearchOption.AllDirectories);
+            if (pakFiles.Length > 0 && mbinFiles.Length == 0)
+            {
+                Console.WriteLine($"⚠️ [NMS Warning] '{displayName}' contains legacy .pak archive(s) (pre-Worlds Part II format) — modern NMS may ignore unextracted .pak mods.");
+            }
+
+            string containerDest = Path.Combine(containerDir, "GAMEDATA", "MODS", modFolderName);
+            CopyDirectoryCrossDevice(sourcePayload, containerDest);
+
+            ModContainerService.SaveManifest(containerDir, new ModContainerManifest
+            {
+                DisplayName = displayName,
+                GameName = "No Man's Sky",
+                Tier = ModTier.Core,
+                IsEnabled = true
+            });
+            Console.WriteLine($"✅ Staged No Man's Sky mod container: {displayName} (folder: {modFolderName})");
         }
+
+
         private static void InstallExpedition33Archive(string tempExtractionPath, string archivePath, string targetGameRootDirectory)
         {
             string win64Dir = Path.Combine(targetGameRootDirectory, "Sandfall", "Binaries", "Win64");
-            string paksModsDir = Path.Combine(targetGameRootDirectory, "Sandfall", "Content", "Paks", "~mods");
-            string logicModsDir = Path.Combine(targetGameRootDirectory, "Sandfall", "Content", "Paks", "LogicMods");
 
-            Directory.CreateDirectory(paksModsDir);
-
-            // 1. Detect UE4SS framework archive itself (contains dwmapi.dll)
             if (Directory.GetFiles(tempExtractionPath, "dwmapi.dll", SearchOption.AllDirectories).Length > 0)
             {
                 Directory.CreateDirectory(win64Dir);
@@ -296,32 +341,35 @@ namespace PercivalMM.Core.Services
                 return;
             }
 
-            // Clean up archive name
-            string modFolderName = Path.GetFileNameWithoutExtension(archivePath).Replace(" ", "_");
-            int dateIndex = modFolderName.IndexOf("_202");
-            if (dateIndex > 0) modFolderName = modFolderName.Substring(0, dateIndex);
+            string displayName = ModContainerService.CleanArchiveDisplayName(archivePath);
+            string containerDir = ModContainerService.GetContainerDirectory(targetGameRootDirectory, displayName);
+            if (Directory.Exists(containerDir)) Directory.Delete(containerDir, true);
 
-            // 2. Detect UE4SS Lua Script mod (contains Scripts/ folder + .lua files)
+            string modFolderName = ModContainerService.SanitizeName(displayName);
+
             string? scriptsDir = Directory.GetDirectories(tempExtractionPath, "Scripts", SearchOption.AllDirectories).FirstOrDefault();
             if (scriptsDir != null && Directory.GetFiles(scriptsDir, "*.lua", SearchOption.AllDirectories).Length > 0)
             {
-                string ue4ssModsDir = Path.Combine(win64Dir, "ue4ss", "Mods");
-                Directory.CreateDirectory(ue4ssModsDir);
-
                 string modWrapper = Directory.GetParent(scriptsDir)!.FullName;
                 string luaModName = modWrapper != tempExtractionPath ? Path.GetFileName(modWrapper) : modFolderName;
-                string destLuaDir = Path.Combine(ue4ssModsDir, luaModName);
+                string destLuaDir = Path.Combine(containerDir, "Sandfall", "Binaries", "Win64", "ue4ss", "Mods", luaModName);
 
-                if (Directory.Exists(destLuaDir)) Directory.Delete(destLuaDir, true);
                 CopyDirectoryCrossDevice(modWrapper, destLuaDir);
-                Console.WriteLine($"✅ Deployed Expedition 33 Lua script mod: {luaModName}");
+                ModContainerService.SaveManifest(containerDir, new ModContainerManifest
+                {
+                    DisplayName = displayName,
+                    GameName = "Clair Obscur: Expedition 33",
+                    Tier = ModTier.Core,
+                    IsEnabled = true
+                });
+                Console.WriteLine($"✅ Staged Expedition 33 Lua script container: {displayName}");
                 return;
             }
 
-            // 3. Detect LogicMods blueprint pak vs. standard ~mods pak (.pak/.ucas/.utoc)
             bool isLogicMod = Directory.GetDirectories(tempExtractionPath, "LogicMods", SearchOption.AllDirectories).Length > 0;
-            string targetRoot = isLogicMod ? logicModsDir : paksModsDir;
-            Directory.CreateDirectory(targetRoot);
+            string relSubRoot = isLogicMod
+                ? Path.Combine("Sandfall", "Content", "Paks", "LogicMods")
+                : Path.Combine("Sandfall", "Content", "Paks", "~mods");
 
             string? nestedTildeMods = Directory.GetDirectories(tempExtractionPath, "~mods", SearchOption.AllDirectories).FirstOrDefault()
                                    ?? Directory.GetDirectories(tempExtractionPath, "LogicMods", SearchOption.AllDirectories).FirstOrDefault();
@@ -335,10 +383,61 @@ namespace PercivalMM.Core.Services
                 sourcePayload = subDirs[0];
             }
 
-            string destinationPath = Path.Combine(targetRoot, modFolderName);
-            if (Directory.Exists(destinationPath)) Directory.Delete(destinationPath, true);
-            CopyDirectoryCrossDevice(sourcePayload, destinationPath);
-            Console.WriteLine($"✅ Deployed Expedition 33 UE5 mod bundle: {modFolderName}");
+            string containerDest = Path.Combine(containerDir, relSubRoot, modFolderName);
+            CopyDirectoryCrossDevice(sourcePayload, containerDest);
+
+            ModContainerService.SaveManifest(containerDir, new ModContainerManifest
+            {
+                DisplayName = displayName,
+                GameName = "Clair Obscur: Expedition 33",
+                Tier = ModTier.Core,
+                IsEnabled = true
+            });
+            Console.WriteLine($"✅ Staged Expedition 33 UE5 mod container: {displayName}");
+        }
+
+        private static void InstallDivinityOS2Archive(string tempExtractionPath, string archivePath, string targetGameRootDirectory, string gameName)
+        {
+            // 1. Detect Norbyte's Script Extender (DXGI.dll) -> drops directly into DefEd/bin/
+            var dxgiFiles = Directory.GetFiles(tempExtractionPath, "DXGI.dll", SearchOption.AllDirectories);
+            if (dxgiFiles.Length > 0)
+            {
+                string defEdBinDir = Path.Combine(targetGameRootDirectory, "DefEd", "bin");
+                Directory.CreateDirectory(defEdBinDir);
+                foreach (var dll in dxgiFiles)
+                {
+                    File.Copy(dll, Path.Combine(defEdBinDir, Path.GetFileName(dll)), true);
+                }
+                Console.WriteLine("✅ Deployed Norbyte Script Extender (DXGI.dll) into DefEd/bin! Remember WINEDLLOVERRIDES=\"dxgi=n,b\" in Steam.");
+                return;
+            }
+
+            // 2. Stage .pak files into container under Larian Studios/Divinity Original Sin 2 Definitive Edition/Mods/
+            string displayName = ModContainerService.CleanArchiveDisplayName(archivePath);
+            string containerDir = ModContainerService.GetContainerDirectory(targetGameRootDirectory, displayName);
+            if (Directory.Exists(containerDir)) Directory.Delete(containerDir, true);
+
+            string containerModsDir = Path.Combine(
+                containerDir,
+                "Larian Studios",
+                "Divinity Original Sin 2 Definitive Edition",
+                "Mods");
+            Directory.CreateDirectory(containerModsDir);
+
+            var pakFiles = Directory.GetFiles(tempExtractionPath, "*.pak", SearchOption.AllDirectories);
+            foreach (var pak in pakFiles)
+            {
+                File.Copy(pak, Path.Combine(containerModsDir, Path.GetFileName(pak)), true);
+            }
+
+            ModContainerService.SaveManifest(containerDir, new ModContainerManifest
+            {
+                DisplayName = displayName,
+                GameName = gameName,
+                Tier = ModTier.Core,
+                IsEnabled = true
+            });
+            Console.WriteLine($"✅ Staged Divinity: OS 2 container '{displayName}' ({pakFiles.Length} .pak file(s)).");
         }
 
         private static void CopyDirectoryCrossDevice(string sourceDir, string destDir)

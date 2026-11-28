@@ -14,22 +14,21 @@
         <Design.DataContext>
         <vm:MainWindowViewModel/>
     </Design.DataContext>
-
     <Grid RowDefinitions="Auto, *, Auto" Margin="20">
         
         <!-- HEADER LAYER SECTION -->
-                <Grid Grid.Row="0" Margin="0,0,0,18">
+        <Grid Grid.Row="0" Margin="0,0,0,18">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
             <!-- Left Title & Tagline -->
-                <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,14">
+            <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,24,14">
                 <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                     <Viewbox Width="54" Height="54" VerticalAlignment="Center">
-    <Canvas Width="512" Height="512">
-        <!-- Layer 1: White Sticker Outline -->
+                        <Canvas Width="512" Height="512">
+ <!-- Layer 1: White Sticker Outline -->
         <Path Fill="#FFFFFF" Data="M160.736 14.621 C192.334 10.258 224.31 8.952 256.184 9.02 C289.12 9.092 321.916 10.633 354.55 15.301 L354.551 15.302 C369.415 17.429 384.268 19.969 398.621 24.479 L398.621 24.479 C401.846 25.493 404.947 26.774 408.119 27.926 C419.051 31.895 430.926 38.827 434.776 50.546 C437.357 58.401 435.541 67.171 433.507 74.93 C433.005 76.848 432.449 78.762 431.986 80.689 C431.045 84.605 430.244 88.551 429.243 92.454 C428.726 95.626 428.224 100.043 427.777 104.754 C427.274 110.051 426.831 115.799 426.464 121.096 C425.72 131.841 425.292 140.677 425.292 140.677 L425.265 141.224 L425.199 141.767 C422.652 162.616 417.032 178.34 409.6 191.247 C405.962 197.564 401.9 203.187 397.571 208.408 C393.64 213.149 389.568 217.473 385.366 221.795 C381.644 226.275 378.407 229.165 375.318 231.534 C374.183 232.405 373.017 233.232 371.871 234.088 C371.272 234.536 370.579 235.068 369.919 235.687 L369.547 236.035 C379.399 251.716 383.991 270.593 381.569 289.392 C380.429 298.244 377.946 306.182 374.328 313.597 C372.598 317.143 370.621 320.547 368.41 323.886 C369.728 325.779 370.979 327.725 372.144 329.752 L372.145 329.754 C380.704 344.654 384.015 363.164 381.454 380.124 L381.454 380.126 C380.513 386.354 378.796 392.085 376.729 398.008 C373.523 407.192 367.96 415.542 361.6 422.811 L361.6 422.812 C361.056 423.434 360.54 424.086 359.999 424.714 C367.001 429.406 373.488 435.587 377.608 442.978 C383.074 452.779 383.711 463.774 378.388 473.696 C376.528 477.162 374.059 480.257 371.221 482.972 C367.157 486.86 362.377 489.504 357.356 491.924 C352.939 494.053 348.328 495.499 343.645 496.9 C327.176 501.828 307.155 503.964 293.516 505.129 C280.401 506.249 255.057 507.62 232.624 506.655 C221.145 506.162 207.61 505.313 193.716 503.156 C178.964 500.867 164.171 497.159 151.022 491.023 L151.02 491.023 C147.064 489.176 143.41 486.728 140.024 483.992 L140.022 483.99 C129.295 475.323 125.365 460.795 130.053 447.894 C131.512 443.879 133.717 440.203 136.484 436.85 L136.484 436.85 C135.54 436.26 134.61 435.651 133.679 435.042 C133.183 434.718 132.601 434.338 132.348 434.188 C125.444 430.099 119.049 424.767 113.345 418.711 C107.879 412.909 103.076 406.47 99.145 399.944 C91.688 387.563 86.674 373.495 84.948 359.108 C84.075 351.827 83.94 344.497 83.988 337.171 C84.018 332.7 84.114 328.232 84.114 323.8 C84.114 298.247 84.654 272.325 84.114 246.834 L84.114 246.833 C83.944 238.834 83.94 230.824 83.94 222.814 C83.94 216.28 83.982 209.862 84.488 203.316 C85.042 196.134 86.139 189.079 88.207 182.144 L92.005 169.405 C88.906 161.42 86.701 153.108 85.065 144.708 C84.2 140.269 83.574 135.792 82.996 131.308 C81.331 118.396 80.959 111.733 80.881 106.207 C80.826 102.409 80.895 98.629 80.734 94.83 C80.696 93.926 80.645 92.949 80.578 91.878 C79.232 86.731 78.181 81.522 76.992 76.339 L76.991 76.335 C76.605 74.648 76.166 72.952 75.76 71.246 C74.959 67.882 74.292 64.506 74.029 61.054 C73.769 57.63 74.146 54.124 75.255 50.873 C77.629 43.911 82.461 38.596 88.536 34.622 C92.554 31.994 96.855 30.117 101.259 28.26 C120.095 20.314 140.625 17.399 160.735 14.621 Z M158.725 252.708 L158.725 268.188 C158.725 290.182 158.69 312.174 158.69 334.168 C158.69 338.36 158.491 342.576 158.667 346.763 C158.735 348.396 158.865 350.037 159.138 351.65 C160.942 362.296 169.029 371.474 179.242 374.847 C180.306 375.198 181.48 375.466 182.734 375.682 C186.994 376.413 192.219 376.516 197.041 376.479 C198.765 376.466 200.483 376.434 202.176 376.4 C200.669 371.486 200.286 366.399 201.359 361.368 L173.563 361.368 L173.563 286.793 L188.563 286.793 C190.157 286.793 191.75 286.793 193.343 286.793 L199.895 280.594 L199.251 280.393 L199.224 271.916 L178.592 271.916 L175.722 277.009 L162.078 257.355 C160.788 255.498 159.699 253.988 158.725 252.708 Z"/>
         <!-- Layer 2: Ember Chalice (#E54E00) -->
         <Path Fill="#E54E00" Data="M162.787 29.48 C193.669 25.216 224.999 23.953 256.151 24.02 C288.366 24.09 320.507 25.584 352.425 30.15 C366.412 32.152 380.613 34.543 394.123 38.789 C397.121 39.731 400.043 40.951 402.997 42.024 C409.046 44.22 418.37 48.667 420.525 55.227 C422.388 60.896 418.804 71.346 417.401 77.183 C416.43 81.225 415.613 85.305 414.558 89.326 C412.068 103.786 410.309 139.948 410.309 139.948 C405.704 177.654 390.401 195.135 374.184 211.777 C367.838 219.55 364.051 220.63 359.663 224.74 C352.656 217.756 345.42 211.189 336.529 206.632 C328.101 202.313 319.002 199.502 309.641 198.133 C303.073 197.172 296.265 197.432 289.65 197.432 L261.662 197.432 L174.676 197.432 L174.676 234.444 C174.676 236.657 175.091 247.573 174.399 248.801 C168.058 239.667 165.554 237.418 159.054 231.378 C152.555 225.339 147.824 223.005 142.783 218.068 C129.61 205.163 120.121 190.793 111.496 175.649 C105.577 165.256 102.058 153.501 99.788 141.841 C98.982 137.704 98.411 133.57 97.873 129.392 C94.688 104.695 96.549 105.015 95.447 89.419 C93.965 84 92.868 78.46 91.612 72.985 C90.627 68.686 89.321 64.33 88.986 59.918 C88.88 58.528 89.002 57.033 89.452 55.713 C91.963 48.349 100.513 44.854 107.089 42.08 C124.363 34.793 144.322 32.03 162.787 29.48 Z M218.531 271.384 C221.538 272.799 227.441 274.971 224.75 279.376 C223.614 281.235 219.446 283.241 217.594 284.586 C216.679 285.25 215.89 286.11 215.073 286.883 L295.645 286.89 C294.543 285.918 293.464 284.849 292.278 283.974 C289.993 282.286 286.011 281.058 285.375 277.931 C284.532 273.777 293.048 270.769 296.101 269.166 L296.139 268.448 L214.213 268.436 C214.213 268.745 214.214 269.053 214.215 269.361 C215.69 269.823 217.119 270.72 218.531 271.384 Z M234.206 357.886 L224.012 357.886 C222.76 357.886 221.166 357.625 219.957 357.976 C219.232 358.186 218.608 358.921 218.201 359.523 C211.895 368.864 219.177 377.823 223.887 385.841 C225.583 388.729 228.079 391.062 225.905 396.67 C224.097 401.341 216.677 408.496 212.487 411.242 C210.876 412.298 208.936 413.023 207.184 413.806 C206.765 411.904 206.487 410.109 205.107 408.649 C201.671 405.012 194.887 407.259 191.795 410.146 C187.256 414.386 186.568 420.125 186.855 425.959 C178.662 427.386 170.61 430.28 163.407 434.454 C153.593 440.141 141.057 448.967 143.384 462.047 C144.108 466.118 146.229 469.721 149.449 472.323 C151.868 474.277 154.536 476.11 157.364 477.43 C180.996 488.457 211.502 490.733 233.268 491.669 C255.034 492.606 279.787 491.247 292.239 490.183 C304.691 489.12 324.035 487.11 339.346 482.529 C343.227 481.368 347.183 480.176 350.844 478.411 C354.314 476.739 358.046 474.817 360.852 472.132 C376.081 457.565 360.216 441.132 346.312 434.033 C338.938 430.268 331.254 427.416 323.141 425.77 C323.418 419.595 322.832 414.338 318.027 409.877 C314.944 407.015 308.096 405.13 304.846 408.776 C303.637 410.132 303.316 411.918 302.885 413.623 C299.535 412.419 299.764 412.838 296.138 410.397 C293.7 408.776 285.203 402.499 283.834 397.06 C282.743 391.211 285.647 387.789 286.515 385.857 C289.352 379.536 295.784 371.632 294.204 364.284 C293.81 362.449 293.032 360.38 291.802 358.927 C291.467 358.53 291.052 358.109 290.535 357.975 C288.019 357.324 280.262 357.886 277.208 357.886 Z"/>
@@ -37,13 +36,12 @@
         <Path Fill="#87CF3E" Data="M98.94 222.814 C98.94 210.626 99.067 198.215 102.581 186.43 C104.069 189.158 105.829 191.675 107.611 194.217 C108.447 195.409 110.162 198.065 110.162 198.065 C110.162 198.065 126.895 220.682 129.76 223.669 C132.626 226.656 134.751 228.791 137.31 231.041 C138.579 232.156 143.342 235.448 143.629 236.878 C144.218 239.809 143.725 243.33 143.725 246.319 L143.725 268.188 C143.725 290.182 143.69 312.174 143.69 334.168 C143.69 340.773 143.241 347.61 144.348 354.152 C147.079 370.278 159.047 383.974 174.537 389.09 C185.676 392.769 201.836 391.044 213.738 391.296 L210.196 396.083 C208.556 395.441 206.825 394.562 205.094 394.191 C194.728 391.971 184.145 396.957 178.407 405.705 C176.443 408.7 175.331 411.991 174.208 415.357 C168.459 417.436 162.694 419.61 157.385 422.671 C156.052 423.44 151.208 426.815 149.996 426.726 C147.575 426.548 142.267 422.629 139.991 421.281 C128.62 414.547 118.753 403.427 111.994 392.205 C105.631 381.641 101.314 369.602 99.841 357.321 C98.514 346.259 99.114 334.916 99.114 323.8 C99.114 298.058 99.655 272.251 99.11 246.515 C98.942 238.622 98.94 230.718 98.94 222.814 Z M271.139 212.341 L188.563 212.341 L188.563 256.916 L262.707 256.916 C275.106 256.916 287.572 256.537 299.964 256.926 C312.23 257.312 322.842 266.726 322.695 279.455 C322.549 291.99 312.148 301.416 299.942 301.784 C288.288 302.136 276.571 301.784 264.91 301.792 C239.461 301.808 214.012 301.793 188.563 301.793 L188.563 346.368 L269.122 346.368 L291.736 346.368 C296.412 346.368 301.786 345.755 306.286 347.285 C323.646 353.187 328.622 373.832 314.421 386.125 C309.318 390.543 302.818 391.172 296.379 391.286 L300.074 395.947 C301.784 395.338 303.591 394.451 305.382 394.12 C317.226 391.934 328.506 398.552 333.662 409.217 C334.585 411.127 335.114 413.3 335.816 415.299 C337.124 415.788 343.58 418.579 344.597 418.359 C346.338 417.984 349.116 414.3 350.309 412.936 C355.366 407.156 360.014 400.377 362.566 393.065 C364.306 388.079 365.83 383.125 366.622 377.884 C368.677 364.274 366.009 349.187 359.138 337.225 C356.409 332.476 353.096 328.309 349.654 324.074 C358.647 312.929 364.828 301.94 366.692 287.475 C369.896 262.603 357.874 237.447 337.067 223.689 C333.416 221.275 329.479 218.896 325.351 217.37 C320.077 215.42 314.699 213.777 309.112 212.998 C303.496 212.215 297.738 212.341 292.084 212.341 Z"/>
     </Canvas>
 </Viewbox>
-
                     <TextBlock Text="PERCIVAL MOD MANAGER" FontSize="26" FontWeight="Bold" Foreground="#f5f5f6" VerticalAlignment="Center"/>
                 </StackPanel>
                 <TextBlock Text="Whom does the Grail serve? Linux Users my Lord" FontSize="12" Foreground="#8a8a93" Margin="0,5,0,0"/>
             </StackPanel>
 
-            <!-- Top-Right Flush Banner: touches top-right window corner & grey divider line -->
+            <!-- Top-Right Flush Banner -->
             <Image Grid.Column="1"
                    Source="{Binding ActiveGameBanner}"
                    HorizontalAlignment="Right"
@@ -59,16 +57,15 @@
                 </Image.OpacityMask>
             </Image>
 
-            <!-- Bottom Header Divider Line -->
             <Separator Grid.ColumnSpan="2" VerticalAlignment="Bottom" Background="#2a2a35" Height="1" Margin="0,0,-20,0"/>
         </Grid>
 
         <!-- MAIN ACTIVE WORKSPACE INTERFACE -->
-        <Grid Grid.Row="1" ColumnDefinitions="240, *">
+                <Grid Grid.Row="1" ColumnDefinitions="265, *">
             
             <!-- LEFT CONTROL LOG PANEL SIDEBAR -->
-                       <Grid Grid.Column="0" RowDefinitions="Auto, *" Margin="0,0,20,0">
-                <StackPanel Grid.Row="0" Spacing="10">
+            <Grid Grid.Column="0" RowDefinitions="Auto, *" Margin="0,0,20,0">
+                <StackPanel Grid.Row="0" Spacing="8">
                     <TextBlock Text="Active Game Module" FontWeight="Bold" Foreground="#a1a1aa"/>
                     <ComboBox ItemsSource="{Binding AvailableGames}"
                               SelectedItem="{Binding SelectedGame}"
@@ -76,7 +73,7 @@
                               Background="#2a2a35"
                               Foreground="#38bdf8"
                               FontWeight="SemiBold"
-                              Padding="10,8">
+                              Padding="10,7">
                         <ComboBox.ItemTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding GameName}"/>
@@ -84,28 +81,149 @@
                         </ComboBox.ItemTemplate>
                     </ComboBox>
 
+                    <!-- PLAYTHROUGH PROFILE SWITCHER -->
+                    <TextBlock Text="Playthrough Profile" FontWeight="Bold" Foreground="#a1a1aa" Margin="0,6,0,0"/>
+                    <ComboBox ItemsSource="{Binding Profiles}"
+                              SelectedItem="{Binding SelectedProfile}"
+                              HorizontalAlignment="Stretch"
+                              Background="#2a2a35"
+                              Foreground="#f5f5f6"
+                              FontWeight="SemiBold"
+                              Padding="10,7">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Name}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <Grid ColumnDefinitions="*, Auto, Auto">
+                        <TextBox Grid.Column="0"
+                                 Text="{Binding NewProfileName}"
+                                 Watermark="New / rename profile..."
+                                 Background="#18181f"
+                                 BorderBrush="#2a2a35"
+                                 Foreground="#f5f5f6"
+                                 FontSize="12"
+                                 Padding="8,5"/>
+                        <Button Grid.Column="1"
+                                Content="💾"
+                                ToolTip.Tip="Save / Update Profile"
+                                Command="{Binding SaveProfileCommand}"
+                                Background="#2a2a35"
+                                BorderBrush="#3f3f46"
+                                BorderThickness="1"
+                                Foreground="#f5f5f6"
+                                Padding="8,5"/>
+                        <Button Grid.Column="2"
+                                Content="🗑️"
+                                ToolTip.Tip="Delete Selected Profile"
+                                Command="{Binding DeleteProfileCommand}"
+                                Background="#3f1d24"
+                                Foreground="#fca5a5"
+                                Padding="8,5"/>
+                    
+                    </Grid>
+                    
+                    <Button Content="💾 Save Profile State"
+                                Command="{Binding SaveProfileCommand}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                Background="#1E293B"
+                                Foreground="#F8FAFC"
+                                BorderBrush="#E54E00"
+                                BorderThickness="1"
+                                FontWeight="SemiBold"
+                                Padding="8,6"
+                                Margin="0,4,0,6"/>
+
+                    <!-- HARMONIZED ACTION BUTTONS (Dark Slate + #E54E00 Ember Primary) -->
                     <Button Content="🔍 Rescan Target Drive" 
                             Command="{Binding TriggerSSDScanCommand}"
                             HorizontalAlignment="Stretch" 
                             HorizontalContentAlignment="Center"
-                            Background="#0284c7" Foreground="White" Padding="10,8" Margin="0,15,0,0"/>
+                            Background="#27272a"
+                            BorderBrush="#3f3f46"
+                            BorderThickness="1"
+                            Foreground="#f5f5f6"
+                            FontWeight="SemiBold"
+                            Padding="10,8"
+                            Margin="0,6,0,0"/>
                     
                     <Button Content="📦 Import Mod Archive (.zip/.rar/.7z)" 
                             Click="OnImportModClicked"
                             HorizontalAlignment="Stretch" 
                             HorizontalContentAlignment="Center"
-                            Background="#22c55e" Foreground="White" Padding="10,8"/>
+                            Background="#27272a"
+                            BorderBrush="#E54E00"
+                            BorderThickness="1"
+                            Foreground="#fb923c"
+                            FontWeight="SemiBold"
+                            Padding="10,8"/>
+                    <CheckBox IsChecked="{Binding AutoAlignModVersions}"
+                              Content="🔄 Auto-Align Mod Versions to Game"
+                              ToolTip.Tip="Automatically aligns GCMODSETTINGS.MXML &amp; mod manifests to your installed Steam game build after patches"
+                              Foreground="#e4e4e7"
+                              FontSize="11.5"
+                              FontWeight="Medium"
+                              Margin="2,2,0,0"/>
 
-                    <Separator Background="#2a2a35" Height="1" Margin="0,10,0,10"/>
+                    <Border Background="#18181f" BorderBrush="#2a2a35" BorderThickness="1" CornerRadius="6" Padding="8,6" Margin="0,4,0,0">
+                        <StackPanel Spacing="5">
+                            <Grid ColumnDefinitions="*, Auto, Auto">
+                                <TextBlock Grid.Column="0"
+                                           Text="{Binding NexusAccountStatus, StringFormat='Nexus: {0}'}"
+                                           Foreground="#a1a1aa"
+                                           FontSize="10.5"
+                                           VerticalAlignment="Center"/>
+                                <Button Grid.Column="1"
+                                        Content="🔑 Authorize"
+                                        Command="{Binding AuthorizeNexusCommand}"
+                                        ToolTip.Tip="Open Nexus Mods in your browser to authorize PercivalMM automatically"
+                                        Background="#27272a"
+                                        BorderBrush="#E54E00"
+                                        BorderThickness="1"
+                                        Foreground="#fb923c"
+                                        FontSize="10.5"
+                                        FontWeight="SemiBold"
+                                        Padding="7,3"
+                                        Margin="4,0,0,0"/>
+                                <Button Grid.Column="2"
+                                        Content="{Binding NxmHandlerButtonText}"
+                                        Command="{Binding ToggleNxmHandlerCommand}"
+                                        ToolTip.Tip="Opt-in/out of handling Nexus 'Mod manager download' (nxm://) links"
+                                        Background="#27272a"
+                                        BorderBrush="#3f3f46"
+                                        BorderThickness="1"
+                                        Foreground="#38bdf8"
+                                        FontSize="10.5"
+                                        FontWeight="SemiBold"
+                                        Padding="7,3"
+                                        Margin="4,0,0,0"/>
+                            </Grid>
+                            <TextBox Text="{Binding NexusApiKey}"
+                                     Watermark="Or paste Personal API Key manually..."
+                                     PasswordChar="•"
+                                     Background="#121216"
+                                     BorderBrush="#2a2a35"
+                                     Foreground="#f5f5f6"
+                                     FontSize="10.5"
+                                     Padding="6,4"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Separator Background="#2a2a35" Height="1" Margin="0,6,0,6"/>
 
                     <Button Content="{Binding LaunchButtonText}" 
                             Command="{Binding LaunchGameCommand}"
                             HorizontalAlignment="Stretch" 
                             HorizontalContentAlignment="Center"
                             FontWeight="Bold"
-                            Background="#E54E00" Foreground="White" Padding="12,10"/>
+                            Background="#E54E00"
+                            Foreground="White"
+                            Padding="12,10"/>
 
-                    <TextBlock Text="Telemetry Engine Log Streams:" FontSize="12" FontWeight="SemiBold" Foreground="#a1a1aa" Margin="0,12,0,2"/>
+                    <TextBlock Text="Telemetry Engine Log Streams:" FontSize="12" FontWeight="SemiBold" Foreground="#a1a1aa" Margin="0,8,0,2"/>
                 </StackPanel>
 
                 <!-- SIDEBAR TELEMETRY STREAM -->
@@ -115,7 +233,6 @@
                     </ScrollViewer>
                 </Border>
             </Grid>
-
             <!-- RIGHT SYSTEM RADAR & INSTALLED MOD GRID VIEWER -->
             <Border Grid.Column="1" Background="#111115" CornerRadius="8" Padding="20">
                 <Grid RowDefinitions="Auto, Auto, *, 12, *">  
@@ -128,7 +245,7 @@
                         </StackPanel>
                     </Border>
 
-                                        <!-- INSTALLED MOD GRID TABLE -->
+                    <!-- INSTALLED MOD GRID TABLE -->
                     <Border Grid.Row="2" Background="#09090b" BorderBrush="#2a2a35" BorderThickness="1" CornerRadius="6" Padding="8">
                         <Grid RowDefinitions="Auto, *">
                             <!-- Table Column Headers -->
@@ -189,7 +306,6 @@
                                                                 Foreground="#38bdf8"
                                                                 Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).SwitchModTierCommand}"
                                                                 CommandParameter="{Binding}"/>
-
                                                     </StackPanel>
 
                                                     <Button Grid.Column="4"
@@ -209,9 +325,7 @@
                             </ScrollViewer>
                         </Grid>
                     </Border>
-
-
-                                        <!-- GAP BETWEEN TABLES (Row 3) -->
+                    <!-- GAP BETWEEN TABLES (Row 3) -->
                     <Border Grid.Row="3"/>
 
                     <!-- TEXTURE / ASSET PACKS TABLE (Row 4 - Orange Border) -->
@@ -267,7 +381,7 @@
                                                                 Foreground="#e4e4e7"
                                                                 Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).MoveModDownCommand}"
                                                                 CommandParameter="{Binding}"/>
-                                                                                                                      <Button Content="⇅"
+                                                        <Button Content="⇅"
                                                                 ToolTip.Tip="Move between Core Mods and Texture / Asset Packs"
                                                                 Padding="6,2"
                                                                 FontSize="10"
@@ -275,7 +389,6 @@
                                                                 Foreground="#38bdf8"
                                                                 Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).SwitchModTierCommand}"
                                                                 CommandParameter="{Binding}"/>
-
                                                     </StackPanel>
 
                                                     <Button Grid.Column="4"

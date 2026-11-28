@@ -11,7 +11,6 @@ using PercivalMM.Core.Services;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 
-
 namespace PercivalMM.UI.ViewModels
 {
     public class MainWindowViewModel : ViewModelBase
@@ -21,10 +20,38 @@ namespace PercivalMM.UI.ViewModels
         private IGameProfile _selectedGame;
 
         public ObservableCollection<IGameProfile> AvailableGames { get; } = new();
-                public ObservableCollection<InstalledModItem> CoreMods { get; } = new();
+        public ObservableCollection<InstalledModItem> CoreMods { get; } = new();
         public ObservableCollection<InstalledModItem> AssetMods { get; } = new();
         public IEnumerable<InstalledModItem> InstalledMods => CoreMods.Concat(AssetMods);
 
+        private readonly ProfileService _profileService = new();
+        public ObservableCollection<PlaythroughProfile> Profiles { get; } = new();
+
+        private PlaythroughProfile? _selectedProfile;
+        public PlaythroughProfile? SelectedProfile
+        {
+            get => _selectedProfile;
+            set
+            {
+                if (_selectedProfile == value) return;
+                _selectedProfile = value;
+                RaisePropertyChanged();
+                if (value != null)
+                    ApplySelectedProfile(value);
+            }
+        }
+
+        private string _newProfileName = string.Empty;
+        public string NewProfileName
+        {
+            get => _newProfileName;
+            set
+            {
+                if (_newProfileName == value) return;
+                _newProfileName = value;
+                RaisePropertyChanged();
+            }
+        }
 
         public IGameProfile SelectedGame
         {
@@ -43,44 +70,29 @@ namespace PercivalMM.UI.ViewModels
             }
         }
 
-        public string LaunchButtonText => SelectedGame?.SteamAppId switch
-{
-    "292030" => "⚔️ Launch Witcher 3",
-    "892970" => "⚔️ Launch Valheim",
-    "275850" => "⚔️ Launch No Man's Sky",
-    "1903340" => "⚔️ Launch Expedition 33",
-    _ => "⚔️ Launch Game"
-};
+        private GameDefinition? ActiveGameDef => SelectedGame as GameDefinition;
 
+        public string LaunchButtonText => ActiveGameDef?.LaunchButtonLabel ?? "⚔️ Launch Game";
 
-   public Bitmap? ActiveGameBanner
-   {
-       get
-       {
-           string fileName = SelectedGame?.SteamAppId switch
-           {
-               "292030" => "witcher3.png",
-               "892970" => "valheim.png",
-               "275850" => "nms.png",
-               "1903340" => "expedition33.png",
-               _ => "witcher3.png"
-           };
+        public Bitmap? ActiveGameBanner
+        {
+            get
+            {
+                string fileName = ActiveGameDef?.BannerFileName ?? "witcher3.png";
 
-           try
-           {
-               var uri = new Uri($"avares://PercivalMM.UI/Assets/Banners/{fileName}");
-               if (AssetLoader.Exists(uri))
-               {
-                   return new Bitmap(AssetLoader.Open(uri));
-               }
-           }
-           catch { }
+                try
+                {
+                    var uri = new Uri($"avares://PercivalMM.UI/Assets/Banners/{fileName}");
+                    if (AssetLoader.Exists(uri))
+                    {
+                        return new Bitmap(AssetLoader.Open(uri));
+                    }
+                }
+                catch { }
 
-           return null;
-       }
-   }
-
-
+                return null;
+            }
+        }
         public string DiscoveredGamePathText
         {
             get => _discoveredGamePathText;
@@ -100,13 +112,54 @@ namespace PercivalMM.UI.ViewModels
         public ICommand DeleteModCommand { get; }
         public ICommand LaunchGameCommand { get; }
         public ICommand SwitchModTierCommand { get; }
+        public ICommand SaveProfileCommand { get; }
+        public ICommand DeleteProfileCommand { get; }
+
+        private string _nexusApiKey = NxmHandlerService.LoadApiKey();
+        public string NexusApiKey
+        {
+            get => _nexusApiKey;
+            set
+            {
+                if (_nexusApiKey == value) return;
+                _nexusApiKey = value;
+                RaisePropertyChanged();
+                NxmHandlerService.SaveApiKey(value);
+            }
+        }
+
+        private bool _isNxmRegistered = NxmHandlerService.IsLinuxNxmHandlerRegistered();
+        public string NxmHandlerButtonText => _isNxmRegistered ? "🔌 Unregister nxm://" : "🔗 Register nxm://";
+
+        public ICommand ToggleNxmHandlerCommand { get; }
+        private string _nexusAccountStatus = string.IsNullOrWhiteSpace(NxmHandlerService.LoadApiKey())
+            ? "Not linked"
+            : "API Key saved";
+        public string NexusAccountStatus
+        {
+            get => _nexusAccountStatus;
+            set { _nexusAccountStatus = value; RaisePropertyChanged(); }
+        }
+
+        public ICommand AuthorizeNexusCommand { get; }
+        private bool _autoAlignModVersions = true;
+        public bool AutoAlignModVersions
+        {
+            get => _autoAlignModVersions;
+            set
+            {
+                if (_autoAlignModVersions == value) return;
+                _autoAlignModVersions = value;
+                RaisePropertyChanged();
+                Log($"🔄 [Version Aligner] Auto-align mod versions {(value ? "ENABLED" : "DISABLED")}.");
+                SyncActiveGameConfig();
+            }
+        }
 
         public MainWindowViewModel()
         {
-            AvailableGames.Add(new Witcher3Profile());
-            AvailableGames.Add(new ValheimProfile());
-            AvailableGames.Add(new NoMansSkyProfile());
-            AvailableGames.Add(new Expedition33Profile());
+            foreach (var game in GameRegistryService.LoadGames())
+                AvailableGames.Add(game);
 
             _selectedGame = AvailableGames[0];
 
@@ -117,35 +170,38 @@ namespace PercivalMM.UI.ViewModels
             DeleteModCommand = new RelayCommand<InstalledModItem>(ExecuteDeleteMod);
             LaunchGameCommand = new RelayCommand(ExecuteLaunchGame);
             SwitchModTierCommand = new RelayCommand<InstalledModItem>(ExecuteSwitchModTier);
+            SaveProfileCommand = new RelayCommand(SaveCurrentProfile);
+            DeleteProfileCommand = new RelayCommand(DeleteSelectedProfile);
+            ToggleNxmHandlerCommand = new RelayCommand(ExecuteToggleNxmHandler);
+            AuthorizeNexusCommand = new RelayCommand(async () => await ExecuteAuthorizeNexusAsync());
+            if (!string.IsNullOrWhiteSpace(NexusApiKey))
+            {
+                _ = VerifySavedNexusKeyOnStartupAsync();
+            }
 
             ExecuteLiveStorageDriveScan();
         }
 
         private bool IsValheimActive => SelectedGame.SteamAppId == "892970";
-        private bool IsNoMansSkyActive => SelectedGame.SteamAppId == "275850";
-        private bool IsExpedition33Active => SelectedGame.SteamAppId == "1903340";
 
         private string GetActiveModsDirectory()
         {
-            if (IsValheimActive) return Path.Combine(DiscoveredGamePathText, "BepInEx", "plugins");
-            if (IsNoMansSkyActive) return Path.Combine(DiscoveredGamePathText, "GAMEDATA", "MODS");
-            if (IsExpedition33Active) return Path.Combine(DiscoveredGamePathText, "Sandfall", "Content", "Paks", "~mods");
-            if (IsExpedition33Active) return Path.Combine(DiscoveredGamePathText, "Sandfall", "Content", "Paks", "~mods_disabled");
-            return Path.Combine(DiscoveredGamePathText, "mods");
+            if (ActiveGameDef == null) return Path.Combine(DiscoveredGamePathText, "mods");
+            string root = ActiveGameDef.ResolveDeploymentRoot(DiscoveredGamePathText);
+            return Path.Combine(root, ActiveGameDef.ActiveModsRelPath.Replace('/', Path.DirectorySeparatorChar));
         }
 
         private string GetDisabledModsDirectory()
         {
-            if (IsValheimActive) return Path.Combine(DiscoveredGamePathText, "BepInEx", "plugins_disabled");
-            if (IsNoMansSkyActive) return Path.Combine(DiscoveredGamePathText, "GAMEDATA", "MODS_DISABLED");
-            return Path.Combine(DiscoveredGamePathText, "mods_disabled");
+            if (ActiveGameDef == null) return Path.Combine(DiscoveredGamePathText, "mods_disabled");
+            string root = ActiveGameDef.ResolveDeploymentRoot(DiscoveredGamePathText);
+            return Path.Combine(root, ActiveGameDef.DisabledModsRelPath.Replace('/', Path.DirectorySeparatorChar));
         }
-
 
         private void ExecuteLiveStorageDriveScan()
         {
             TelemetryLogStreamText += $"\n[Radar Action] Scanning storage arrays for {SelectedGame.GameName}...";
-            
+
             string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             string pathResult = ScannerService.LocateGamePath(home, SelectedGame.DefaultInstallFolderName);
 
@@ -154,16 +210,18 @@ namespace PercivalMM.UI.ViewModels
                 DiscoveredGamePathText = pathResult;
                 TelemetryLogStreamText += $"\n[Radar Success] Locked target path: {pathResult}";
                 RefreshInstalledModsGrid();
+                RefreshProfiles();
             }
             else
             {
                 CoreMods.Clear();
                 AssetMods.Clear();
+                Profiles.Clear();
                 DiscoveredGamePathText = $"❌ {SelectedGame.GameName} folder not found across storage arrays.";
                 TelemetryLogStreamText += $"\n[Radar Warning] Zero matching directories found for '{SelectedGame.DefaultInstallFolderName}'.";
             }
         }
-                public void RefreshInstalledModsGrid()
+        public void RefreshInstalledModsGrid()
         {
             if (!Directory.Exists(DiscoveredGamePathText)) return;
 
@@ -172,18 +230,63 @@ namespace PercivalMM.UI.ViewModels
 
             string activeDir = GetActiveModsDirectory();
             string disabledDir = GetDisabledModsDirectory();
+            string badge = ActiveGameDef?.ModTypeBadge ?? "MOD";
 
             int corePriority = 1;
             int assetPriority = 1;
 
+            // 1. Load unified Mod Containers from .percival_staging/Mods/
+            string containersRoot = ModContainerService.GetContainersRootDirectory(DiscoveredGamePathText);
+            if (Directory.Exists(containersRoot))
+            {
+                var containerEntries = Directory.GetDirectories(containersRoot)
+                    .Select(dir => new { Dir = dir, Manifest = ModContainerService.LoadManifest(dir) })
+                    .OrderBy(x => x.Manifest?.Priority ?? 999)
+                    .ThenBy(x => x.Manifest?.DisplayName ?? Path.GetFileName(x.Dir), StringComparer.OrdinalIgnoreCase);
+
+                foreach (var entry in containerEntries)
+                {
+                    var manifest = entry.Manifest ?? new ModContainerManifest
+                    {
+                        DisplayName = Path.GetFileName(entry.Dir),
+                        Tier = DetectFolderTier(entry.Dir),
+                        IsEnabled = true
+                    };
+
+                    ModTier tier = DetectFolderTier(entry.Dir, manifest.Tier);
+
+                    var item = new InstalledModItem
+                    {
+                        Name = manifest.DisplayName,
+                        FolderPath = entry.Dir,
+                        StagingPath = entry.Dir,
+                        ModType = tier == ModTier.Assets ? "ASSET" : badge,
+                        Priority = tier == ModTier.Assets ? assetPriority++ : corePriority++,
+                        IsEnabled = manifest.IsEnabled,
+                        Tier = tier,
+                        ItemKind = manifest.ItemKind,
+                        CategoryGroup = manifest.CategoryGroup
+                    };
+
+                    if (tier == ModTier.Assets)
+                        AssetMods.Add(item);
+                    else
+                        CoreMods.Add(item);
+                }
+            }
+
+            // 2. Load legacy non-container folders (skips symlinks created by ModContainerService!)
             void AddDiscoveredFolder(string dir, bool isEnabled)
             {
+                if (new DirectoryInfo(dir).LinkTarget != null) return;
+
                 ModTier tier = DetectFolderTier(dir);
+
                 var item = new InstalledModItem
                 {
                     Name = Path.GetFileName(dir),
                     FolderPath = dir,
-                    ModType = tier == ModTier.Assets ? "ASSET" : (IsValheimActive ? "BEPINEX" : (IsNoMansSkyActive ? "NMS" : "MOD")),
+                    ModType = tier == ModTier.Assets ? "ASSET" : badge,
                     Priority = tier == ModTier.Assets ? assetPriority++ : corePriority++,
                     IsEnabled = isEnabled,
                     Tier = tier
@@ -206,7 +309,8 @@ namespace PercivalMM.UI.ViewModels
                 foreach (var dir in Directory.GetDirectories(disabledDir).OrderBy(d => d))
                     AddDiscoveredFolder(dir, false);
             }
-                        if (IsValheimActive)
+            // 3. Load Valheim HD Texture / Asset Packs (.percival_staging/AssetPacks/)
+            if (IsValheimActive)
             {
                 string stagingPacksRoot = ValheimAssetPackService.GetStagingRootDirectory(DiscoveredGamePathText);
                 if (Directory.Exists(stagingPacksRoot))
@@ -229,17 +333,15 @@ namespace PercivalMM.UI.ViewModels
                 }
             }
 
-
             TelemetryLogStreamText += $"\n[Grid Sync] Discovered {CoreMods.Count} core mod(s) & {AssetMods.Count} asset pack(s) for {SelectedGame.GameName}.";
             RunConflictCheck();
             SyncActiveGameConfig();
         }
 
-               private static ModTier DetectFolderTier(string folderPath)
+        private static ModTier DetectFolderTier(string folderPath, ModTier? defaultTier = null)
         {
-            if (!Directory.Exists(folderPath)) return ModTier.Core;
+            if (!Directory.Exists(folderPath)) return defaultTier ?? ModTier.Core;
 
-            // 1. Check if the user manually pinned this mod to a specific tier
             string overrideMarker = Path.Combine(folderPath, ".percival_tier");
             if (File.Exists(overrideMarker))
             {
@@ -248,31 +350,30 @@ namespace PercivalMM.UI.ViewModels
                     return manualTier;
             }
 
+            if (defaultTier.HasValue) return defaultTier.Value;
+
             var files = Directory.GetFiles(folderPath, "*.*", SearchOption.AllDirectories);
 
-            // 2. Hard code/script indicators -> ALWAYS Core
             bool hasCodeOrPlugin = files.Any(f =>
                 f.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ||
                 f.EndsWith(".lua", StringComparison.OrdinalIgnoreCase) ||
-                f.EndsWith(".ws", StringComparison.OrdinalIgnoreCase)  || // Witcher 3 scripts
-                f.EndsWith(".esp", StringComparison.OrdinalIgnoreCase) || // Skyrim plugins
+                f.EndsWith(".ws", StringComparison.OrdinalIgnoreCase) ||
+                f.EndsWith(".esp", StringComparison.OrdinalIgnoreCase) ||
                 f.EndsWith(".esm", StringComparison.OrdinalIgnoreCase) ||
                 f.EndsWith(".esl", StringComparison.OrdinalIgnoreCase));
 
             if (hasCodeOrPlugin) return ModTier.Core;
 
-            // 3. Game-specific & loose asset indicators -> Assets
             bool hasLooseAssets = files.Any(f =>
                 f.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
                 f.EndsWith(".dds", StringComparison.OrdinalIgnoreCase) ||
                 f.EndsWith(".obj", StringComparison.OrdinalIgnoreCase) ||
                 f.EndsWith(".fbx", StringComparison.OrdinalIgnoreCase) ||
                 f.EndsWith(".nif", StringComparison.OrdinalIgnoreCase) ||
-                Path.GetFileName(f).Equals("texture.cache", StringComparison.OrdinalIgnoreCase)); // Witcher 3 textures
+                Path.GetFileName(f).Equals("texture.cache", StringComparison.OrdinalIgnoreCase));
 
             if (hasLooseAssets) return ModTier.Assets;
 
-            // 4. Smart name heuristic for packed archives (.pak / .bundle without scripts)
             string folderName = Path.GetFileName(folderPath).ToLowerInvariant();
             string[] assetKeywords = { "texture", "retex", "4k", "2k", "8k", "hd", "mesh", "visual", "reshade", "cavill", "face", "hair", "skin", "outfit", "armor" };
             if (assetKeywords.Any(k => folderName.Contains(k)))
@@ -280,47 +381,89 @@ namespace PercivalMM.UI.ViewModels
 
             return ModTier.Core;
         }
-              
-        private void SyncActiveGameConfig()
+
+                private void SyncActiveGameConfig()
         {
-            if (IsValheimActive)
+            string containerSyncResult = ModContainerService.SyncDeployedContainers(
+                DiscoveredGamePathText,
+                SelectedGame.SteamAppId,
+                InstalledMods);
+            Log($"[Container Sync] {containerSyncResult}");
+
+            if (AutoAlignModVersions)
             {
-                string launchResult = SteamLaunchOptionsService.ConfigureValheimBepInExLaunchOption(DiscoveredGamePathText);
-                Log($"[BepInEx Sync] {launchResult}");
-
-                foreach (var diag in ValheimHealthCheckService.RunDiagnostics(DiscoveredGamePathText))
-                {
-                    Log(diag);
-                }
-                string assetSyncResult = ValheimAssetPackService.SyncDeployedAssetPacks(DiscoveredGamePathText, AssetMods);
-                Log($"[Asset Sync] {assetSyncResult}");
-
+                string alignResult = VersionAlignerService.AlignStagedModManifests(
+                    DiscoveredGamePathText,
+                    SelectedGame.SteamAppId,
+                    InstalledMods);
+                Log($"[Version Aligner] {alignResult}");
             }
-            else if (IsNoMansSkyActive)
-            {
-                var modList = InstalledMods.Select(m => new ModInfo
-                {
-                    Name = m.Name,
-                    Priority = m.Priority,
-                    IsEnabled = m.IsEnabled
-                }).ToList();
 
-                string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                SelectedGame.SaveConfiguration(modList, DiscoveredGamePathText, home);
-                Log("[NMS Sync] GCMODSETTINGS.MXML load order and enabled state synced.");
-            }
-            else
+            string engine = ActiveGameDef?.SyncEngine ?? "Default";
+            switch (engine)
             {
-                string syncResult = Witcher3ConfigSync.SyncLoadOrder(DiscoveredGamePathText, InstalledMods);
-                Log($"[Proton Sync] {syncResult}");
+                case "Valheim":
+                    string launchResult = SteamLaunchOptionsService.ConfigureValheimBepInExLaunchOption(DiscoveredGamePathText);
+                    Log($"[BepInEx Sync] {launchResult}");
+
+                    foreach (var diag in ValheimHealthCheckService.RunDiagnostics(DiscoveredGamePathText))
+                    {
+                        Log(diag);
+                    }
+                    string assetSyncResult = ValheimAssetPackService.SyncDeployedAssetPacks(DiscoveredGamePathText, AssetMods);
+                    Log($"[Asset Sync] {assetSyncResult}");
+                    break;
+
+                case "NMS":
+                    var modList = InstalledMods.Select(m => new ModInfo
+                    {
+                        Name = VersionAlignerService.ResolveNmsDeployedFolderName(m),
+                        Priority = m.Priority,
+                        IsEnabled = m.IsEnabled
+                    }).ToList();
+
+                    string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                    new NoMansSkyProfile().SaveConfiguration(modList, DiscoveredGamePathText, home, AutoAlignModVersions);
+                    Log($"[NMS Sync] GCMODSETTINGS.MXML synced ({modList.Count} entries, Auto-Align: {(AutoAlignModVersions ? "ON" : "OFF")}).");
+                    break;
+
+                case "Witcher3":
+                    string syncResult = Witcher3ConfigSync.SyncLoadOrder(DiscoveredGamePathText, InstalledMods);
+                    Log($"[Proton Sync] {syncResult}");
+                    break;
+
+                case "DOS2":
+                    string dos2SyncResult = DivinityOS2ConfigSync.SyncLoadOrder(DiscoveredGamePathText, InstalledMods);
+                    Log($"[DOS2 Sync] {dos2SyncResult}");
+                    break;
             }
         }
-
-
 
         private void ExecuteToggleMod(InstalledModItem? mod)
         {
             if (mod == null || !Directory.Exists(DiscoveredGamePathText)) return;
+
+            // 1. Unified Mod Container (.percival_staging/Mods/<Container>/)
+            if (!string.IsNullOrEmpty(mod.StagingPath) &&
+                mod.StagingPath.Replace('\\', '/').Contains($"/{ModContainerService.StagingRootName}/{ModContainerService.ModsSubdir}/"))
+            {
+                var manifest = ModContainerService.LoadManifest(mod.StagingPath) ?? new ModContainerManifest
+                {
+                    DisplayName = mod.Name,
+                    Tier = mod.Tier,
+                    Priority = mod.Priority
+                };
+                manifest.IsEnabled = mod.IsEnabled;
+                ModContainerService.SaveManifest(mod.StagingPath, manifest);
+
+                Log($"[Container State] {(mod.IsEnabled ? "Enabled" : "Disabled")}: {mod.Name}");
+                SyncActiveGameConfig();
+                AutoSaveSelectedProfile();
+                RunConflictCheck();
+                return;
+            }
+
+            // 2. Valheim HD Asset Pack (.percival_staging/AssetPacks/<Pack>/)
             if (IsValheimActive && mod.FolderPath.Replace('\\', '/').Contains($"/{ValheimAssetPackService.StagingRootName}/"))
             {
                 string disabledMarker = Path.Combine(mod.FolderPath, ".percival_disabled");
@@ -335,9 +478,11 @@ namespace PercivalMM.UI.ViewModels
 
                 Log($"[Mod State] {(mod.IsEnabled ? "Enabled" : "Disabled")} HD Pack: {mod.Name}");
                 SyncActiveGameConfig();
+                AutoSaveSelectedProfile();
                 return;
             }
 
+            // 3. Legacy non-container folder fallback
             try
             {
                 string targetParent = mod.IsEnabled ? GetActiveModsDirectory() : GetDisabledModsDirectory();
@@ -351,6 +496,7 @@ namespace PercivalMM.UI.ViewModels
                     TelemetryLogStreamText += $"\n[Mod State] {(mod.IsEnabled ? "Enabled" : "Disabled")}: {mod.Name}";
 
                     SyncActiveGameConfig();
+                    AutoSaveSelectedProfile();
                     RunConflictCheck();
                 }
             }
@@ -360,7 +506,7 @@ namespace PercivalMM.UI.ViewModels
             }
         }
 
-                private ObservableCollection<InstalledModItem> GetCollectionForMod(InstalledModItem mod) =>
+        private ObservableCollection<InstalledModItem> GetCollectionForMod(InstalledModItem mod) =>
             mod.Tier == ModTier.Assets ? AssetMods : CoreMods;
 
         private void MoveModPriority(InstalledModItem? mod, int direction)
@@ -378,6 +524,15 @@ namespace PercivalMM.UI.ViewModels
             for (int i = 0; i < targetList.Count; i++)
             {
                 targetList[i].Priority = i + 1;
+                if (!string.IsNullOrEmpty(targetList[i].StagingPath))
+                {
+                    var manifest = ModContainerService.LoadManifest(targetList[i].StagingPath!);
+                    if (manifest != null)
+                    {
+                        manifest.Priority = targetList[i].Priority;
+                        ModContainerService.SaveManifest(targetList[i].StagingPath!, manifest);
+                    }
+                }
             }
 
             var snapshot = targetList.ToList();
@@ -396,7 +551,12 @@ namespace PercivalMM.UI.ViewModels
 
             try
             {
-                if (Directory.Exists(mod.FolderPath))
+                if (!string.IsNullOrEmpty(mod.StagingPath) &&
+                    mod.StagingPath.Replace('\\', '/').Contains($"/{ModContainerService.StagingRootName}/{ModContainerService.ModsSubdir}/"))
+                {
+                    ModContainerService.DeleteContainer(DiscoveredGamePathText, mod, SelectedGame.SteamAppId);
+                }
+                else if (Directory.Exists(mod.FolderPath))
                 {
                     Directory.Delete(mod.FolderPath, true);
                 }
@@ -423,17 +583,50 @@ namespace PercivalMM.UI.ViewModels
                 TelemetryLogStreamText += $"\n❌ [Error] Failed to delete {mod.Name}: {ex.Message}";
             }
         }
-     
-     private void ExecuteSwitchModTier(InstalledModItem? mod)
-     {
-         if (mod == null || !Directory.Exists(mod.FolderPath)) return;
+        private void ExecuteSwitchModTier(InstalledModItem? mod)
+        {
+            if (mod == null || !Directory.Exists(mod.FolderPath)) return;
 
-         ModTier newTier = mod.Tier == ModTier.Core ? ModTier.Assets : ModTier.Core;
-         File.WriteAllText(Path.Combine(mod.FolderPath, ".percival_tier"), newTier.ToString());
+            if (IsValheimActive &&
+                mod.Tier == ModTier.Core &&
+                !mod.FolderPath.Replace('\\', '/').Contains($"/{ValheimAssetPackService.StagingRootName}/"))
+            {
+                string stagingPackDir = ValheimAssetPackService.GetStagingPackDirectory(DiscoveredGamePathText, mod.Name);
+                if (Directory.Exists(stagingPackDir)) Directory.Delete(stagingPackDir, true);
 
-         TelemetryLogStreamText += $"\n⇅ [Tier Override] Moved '{mod.Name}' to {(newTier == ModTier.Assets ? "Texture / Asset Packs" : "Installed Mod Bundle")}.";
-         RefreshInstalledModsGrid();
-     }
+                if (!string.IsNullOrEmpty(mod.StagingPath))
+                {
+                    ModContainerService.DeleteContainer(DiscoveredGamePathText, mod, SelectedGame.SteamAppId);
+                }
+                else
+                {
+                    Directory.Move(mod.FolderPath, stagingPackDir);
+                }
+
+                ValheimAssetPackService.NormalizeStagedPackLayout(stagingPackDir);
+                File.WriteAllText(Path.Combine(stagingPackDir, ".percival_tier"), "Assets");
+
+                Log($"🎨 [Asset Migration] Migrated '{mod.Name}' from BepInEx/plugins to HD Asset Staging.");
+                RefreshInstalledModsGrid();
+                return;
+            }
+
+            ModTier newTier = mod.Tier == ModTier.Core ? ModTier.Assets : ModTier.Core;
+            File.WriteAllText(Path.Combine(mod.FolderPath, ".percival_tier"), newTier.ToString());
+
+            if (!string.IsNullOrEmpty(mod.StagingPath))
+            {
+                var manifest = ModContainerService.LoadManifest(mod.StagingPath);
+                if (manifest != null)
+                {
+                    manifest.Tier = newTier;
+                    ModContainerService.SaveManifest(mod.StagingPath, manifest);
+                }
+            }
+
+            TelemetryLogStreamText += $"\n⇅ [Tier Override] Moved '{mod.Name}' to {(newTier == ModTier.Assets ? "Texture / Asset Packs" : "Installed Mod Bundle")}.";
+            RefreshInstalledModsGrid();
+        }
 
         private async void ExecuteLaunchGame()
         {
@@ -467,12 +660,219 @@ namespace PercivalMM.UI.ViewModels
             }
         }
 
-                
+        public void RefreshProfiles()
+        {
+            if (!Directory.Exists(DiscoveredGamePathText)) return;
+
+            var loaded = _profileService.LoadProfiles(DiscoveredGamePathText, SelectedGame.GameName);
+            Profiles.Clear();
+            foreach (var p in loaded)
+                Profiles.Add(p);
+
+            if (Profiles.Count == 0)
+            {
+                var defaultProfile = _profileService.CaptureCurrentState(
+                    "Default Playthrough",
+                    SelectedGame.GameName,
+                    CoreMods,
+                    AssetMods);
+                _profileService.SaveProfile(DiscoveredGamePathText, defaultProfile);
+                Profiles.Add(defaultProfile);
+            }
+
+            _selectedProfile = Profiles.FirstOrDefault();
+            RaisePropertyChanged(nameof(SelectedProfile));
+        }
+
+        public void SaveCurrentProfile()
+        {
+            if (!Directory.Exists(DiscoveredGamePathText)) return;
+
+            bool isCreatingNew = !string.IsNullOrWhiteSpace(NewProfileName);
+            if (!isCreatingNew && SelectedProfile == null)
+            {
+                Log("⚠️ [Profiles] Select an existing profile or type a new profile name first.");
+                return;
+            }
+
+            string name = isCreatingNew ? NewProfileName.Trim() : SelectedProfile!.Name;
+            string? existingId = isCreatingNew ? null : SelectedProfile!.Id;
+
+            var captured = _profileService.CaptureCurrentState(
+                name,
+                SelectedGame.GameName,
+                CoreMods,
+                AssetMods,
+                existingId);
+
+            _profileService.SaveProfile(DiscoveredGamePathText, captured);
+            NewProfileName = string.Empty;
+
+            _isApplyingProfile = true;
+            try
+            {
+                RefreshProfiles();
+                _selectedProfile = Profiles.FirstOrDefault(p => p.Id == captured.Id);
+                RaisePropertyChanged(nameof(SelectedProfile));
+            }
+            finally
+            {
+                _isApplyingProfile = false;
+            }
+
+            Log($"💾 [Profiles] Saved state to '{captured.Name}'.");
+        }
+        public void DeleteSelectedProfile()
+        {
+            if (!Directory.Exists(DiscoveredGamePathText) || SelectedProfile == null || Profiles.Count <= 1)
+                return;
+
+            string deletedName = SelectedProfile.Name;
+            _profileService.DeleteProfile(DiscoveredGamePathText, SelectedProfile);
+            RefreshProfiles();
+            if (_selectedProfile != null)
+                ApplySelectedProfile(_selectedProfile);
+
+            Log($"🗑️ [Profiles] Deleted profile '{deletedName}'.");
+        }
+
+        private bool _isApplyingProfile;
+
+        private void AutoSaveSelectedProfile()
+        {
+            if (_isApplyingProfile || SelectedProfile == null || !Directory.Exists(DiscoveredGamePathText)) return;
+
+            var updated = _profileService.CaptureCurrentState(
+                SelectedProfile.Name,
+                SelectedGame.GameName,
+                CoreMods,
+                AssetMods,
+                SelectedProfile.Id);
+
+            _profileService.SaveProfile(DiscoveredGamePathText, updated);
+            SelectedProfile.Mods = updated.Mods;
+            SelectedProfile.AssetPacks = updated.AssetPacks;
+            SelectedProfile.LastModifiedUtc = updated.LastModifiedUtc;
+        }
+
+        private void ApplySelectedProfile(PlaythroughProfile profile)
+        {
+            _isApplyingProfile = true;
+            try
+            {
+                _profileService.ApplyProfileToLists(profile, CoreMods, AssetMods);
+
+                foreach (var mod in CoreMods)
+                    ExecuteToggleMod(mod);
+                foreach (var asset in AssetMods)
+                    ExecuteToggleMod(asset);
+
+                var coreSnap = CoreMods.ToList();
+                CoreMods.Clear();
+                foreach (var m in coreSnap) CoreMods.Add(m);
+
+                var assetSnap = AssetMods.ToList();
+                AssetMods.Clear();
+                foreach (var a in assetSnap) AssetMods.Add(a);
+
+                SyncActiveGameConfig();
+                RunConflictCheck();
+                Log($"🔀 [Profiles] Switched to '{profile.Name}'.");
+            }
+            finally
+            {
+                _isApplyingProfile = false;
+            }
+        }
+
+        private void ExecuteToggleNxmHandler()
+        {
+            string msg = _isNxmRegistered
+                ? NxmHandlerService.UnregisterLinuxNxmHandler()
+                : NxmHandlerService.RegisterLinuxNxmHandler();
+
+            _isNxmRegistered = NxmHandlerService.IsLinuxNxmHandlerRegistered();
+            RaisePropertyChanged(nameof(NxmHandlerButtonText));
+            Log($"[Nexus NXM] {msg}");
+        }
+
+        private async System.Threading.Tasks.Task VerifySavedNexusKeyOnStartupAsync()
+        {
+            try
+            {
+                string user = await NxmHandlerService.ValidateApiKeyAsync(NexusApiKey);
+                NexusAccountStatus = $"✓ {user}";
+            }
+            catch
+            {
+                NexusAccountStatus = "⚠️ Key invalid";
+            }
+        }
+
+        private async System.Threading.Tasks.Task ExecuteAuthorizeNexusAsync()
+        {
+            try
+            {
+                NexusAccountStatus = "Waiting for browser...";
+                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromMinutes(3));
+                var (apiKey, username) = await NxmHandlerService.AuthorizeViaSsoAsync(Log, cts.Token);
+                _nexusApiKey = apiKey;
+                RaisePropertyChanged(nameof(NexusApiKey));
+                NexusAccountStatus = $"✓ {username}";
+                Log($"✅ [Nexus SSO] Authorized and linked Nexus Mods account: {username}");
+            }
+            catch (Exception ex)
+            {
+                NexusAccountStatus = "Authorization failed";
+                Log($"❌ [Nexus SSO Error] {ex.Message}");
+            }
+        }
+
+        public async System.Threading.Tasks.Task HandleIncomingNxmUriAsync(string nxmUri)
+        {
+            var req = NxmHandlerService.ParseNxmUri(nxmUri);
+            if (req == null)
+            {
+                Log($"⚠️ [Nexus NXM] Invalid nxm:// link: {nxmUri}");
+                return;
+            }
+
+            var matchedGame = GameRegistryService.GetByNexusDomain(req.GameDomain);
+            if (matchedGame == null)
+            {
+                Log($"⚠️ [Nexus NXM] Unsupported Nexus game domain '{req.GameDomain}'. Add its NexusDomain to games.json first.");
+                return;
+            }
+
+            if (SelectedGame.SteamAppId != matchedGame.SteamAppId)
+            {
+                SelectedGame = matchedGame;
+            }
+
+            if (!Directory.Exists(DiscoveredGamePathText))
+            {
+                Log($"❌ [Nexus NXM] Cannot install: {matchedGame.GameName} install path was not found.");
+                return;
+            }
+
+            try
+            {
+                string archivePath = await NxmHandlerService.DownloadFromNxmAsync(req, NexusApiKey, Log);
+                ModInstaller.InstallZipMod(archivePath, DiscoveredGamePathText, matchedGame.GameName);
+                RefreshInstalledModsGrid();
+                AutoSaveSelectedProfile();
+                Log($"🎉 [Nexus NXM] Installed '{Path.GetFileName(archivePath)}' for {matchedGame.GameName}.");
+            }
+            catch (Exception ex)
+            {
+                Log($"❌ [Nexus NXM Error] {ex.Message}");
+            }
+        }
+
         private void Log(string message)
         {
             TelemetryLogStreamText = $"{message}\n{TelemetryLogStreamText}";
         }
-
 
         private void RunConflictCheck()
         {

@@ -14,6 +14,15 @@ namespace PercivalMM.Core.Games
 
         public void SaveConfiguration(List<ModInfo> mods, string gameInstallPath, string homePath)
         {
+            SaveConfiguration(mods, gameInstallPath, homePath, autoAlignVersions: true);
+        }
+
+        public void SaveConfiguration(
+            List<ModInfo> mods,
+            string gameInstallPath,
+            string homePath,
+            bool autoAlignVersions)
+        {
             string settingsDir = Path.Combine(gameInstallPath, "Binaries", "SETTINGS");
             Directory.CreateDirectory(settingsDir);
             string mxmlPath = Path.Combine(settingsDir, "GCMODSETTINGS.MXML");

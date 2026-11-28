@@ -41,21 +41,29 @@ public class ValheimAssetPackService
             .Where(p => !string.IsNullOrWhiteSpace(p))
             .ToList();
 
-        bool hasManagedDll = paths.Any(p =>
-            p.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) &&
-            !p.Contains("valheim_Data/Managed/", StringComparison.OrdinalIgnoreCase));
+        bool hasTextureDataFolder = paths.Any(p =>
+            p.Contains("HDValheimTexturesData/", StringComparison.OrdinalIgnoreCase) ||
+            p.Contains("HDTerrainData/", StringComparison.OrdinalIgnoreCase) ||
+            p.Contains("CustomTextures/", StringComparison.OrdinalIgnoreCase));
 
-        if (hasManagedDll)
-            return false;
-
-        return paths.Any(p =>
+        bool hasRawAssetFiles = paths.Any(p =>
             p.Contains("valheim_Data/", StringComparison.OrdinalIgnoreCase) ||
-            p.StartsWith("CustomTextures/", StringComparison.OrdinalIgnoreCase) ||
-            p.Contains("/CustomTextures/", StringComparison.OrdinalIgnoreCase) ||
             p.EndsWith(".assets", StringComparison.OrdinalIgnoreCase) ||
             p.EndsWith(".ress", StringComparison.OrdinalIgnoreCase) ||
             p.EndsWith(".resource", StringComparison.OrdinalIgnoreCase));
+
+        bool hasNonTextureDll = paths.Any(p =>
+            p.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) &&
+            !p.Contains("valheim_Data/Managed/", StringComparison.OrdinalIgnoreCase) &&
+            !p.Contains("Texture", StringComparison.OrdinalIgnoreCase) &&
+            !p.Contains("Terrain", StringComparison.OrdinalIgnoreCase));
+
+        if (hasNonTextureDll && !hasTextureDataFolder)
+            return false;
+
+        return hasTextureDataFolder || hasRawAssetFiles;
     }
+
     public static void NormalizeStagedPackLayout(string stagingPackDir)
     {
         if (!Directory.Exists(stagingPackDir))
@@ -71,13 +79,32 @@ public class ValheimAssetPackService
 
             if (!innerName.Equals("valheim_Data", StringComparison.OrdinalIgnoreCase) &&
                 !innerName.Equals("BepInEx", StringComparison.OrdinalIgnoreCase) &&
-                !innerName.Equals("CustomTextures", StringComparison.OrdinalIgnoreCase))
+                !innerName.Equals("CustomTextures", StringComparison.OrdinalIgnoreCase) &&
+                !innerName.EndsWith("Data", StringComparison.OrdinalIgnoreCase))
             {
                 string tempDir = stagingPackDir + "_unwrap_tmp";
                 Directory.Move(innerDir, tempDir);
                 Directory.Delete(stagingPackDir, recursive: true);
                 Directory.Move(tempDir, stagingPackDir);
             }
+        }
+
+        string nestedPlugins = Path.Combine(stagingPackDir, "BepInEx", "plugins");
+        if (Directory.Exists(nestedPlugins))
+        {
+            foreach (var dir in Directory.GetDirectories(nestedPlugins))
+            {
+                string dest = Path.Combine(stagingPackDir, Path.GetFileName(dir));
+                if (!Directory.Exists(dest))
+                    Directory.Move(dir, dest);
+            }
+            foreach (var file in Directory.GetFiles(nestedPlugins))
+            {
+                string dest = Path.Combine(stagingPackDir, Path.GetFileName(file));
+                if (!File.Exists(dest))
+                    File.Move(file, dest);
+            }
+            try { Directory.Delete(Path.Combine(stagingPackDir, "BepInEx"), recursive: true); } catch { }
         }
 
         string rootCustomTextures = Path.Combine(stagingPackDir, "CustomTextures");
@@ -89,7 +116,6 @@ public class ValheimAssetPackService
                 Directory.Move(rootCustomTextures, targetCustomTextures);
         }
     }
-
     public static string SyncDeployedAssetPacks(string gameInstallPath, IEnumerable<InstalledModItem> orderedAssetPacks)
     {
         string backupRoot = GetVanillaBackupDirectory(gameInstallPath);
@@ -103,6 +129,21 @@ public class ValheimAssetPackService
             File.Copy(backupFile, targetFile, overwrite: true);
         }
 
+        string pluginsDir = Path.Combine(gameInstallPath, "BepInEx", "plugins");
+        if (Directory.Exists(pluginsDir))
+        {
+            foreach (var dir in Directory.GetDirectories(pluginsDir))
+            {
+                if (new DirectoryInfo(dir).LinkTarget != null)
+                    Directory.Delete(dir, false);
+            }
+            foreach (var file in Directory.GetFiles(pluginsDir))
+            {
+                if (new FileInfo(file).LinkTarget != null)
+                    File.Delete(file);
+            }
+        }
+
         var activePacks = orderedAssetPacks
             .Where(p => p.IsEnabled && !p.IsSeparator &&
                         (p.StagingPath != null || p.FolderPath.Replace('\\', '/').Contains($"/{StagingRootName}/{PacksSubdir}/")))
@@ -110,11 +151,60 @@ public class ValheimAssetPackService
             .ToList();
 
         int totalAppliedFiles = 0;
+
         foreach (var pack in activePacks)
         {
             string packStageDir = pack.StagingPath ?? pack.FolderPath;
             if (!Directory.Exists(packStageDir))
                 continue;
+
+            bool hasRawValheimData = Directory.Exists(Path.Combine(packStageDir, "valheim_Data")) ||
+                                     Directory.GetFiles(packStageDir, "*.assets", SearchOption.TopDirectoryOnly).Any();
+
+            if (!hasRawValheimData)
+            {
+                Directory.CreateDirectory(pluginsDir);
+
+                var topDirs = Directory.GetDirectories(packStageDir);
+                var topFiles = Directory.GetFiles(packStageDir)
+                    .Where(f => !Path.GetFileName(f).StartsWith(".percival", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (topDirs.Any() || topFiles.Any())
+                {
+                    foreach (var dir in topDirs)
+                    {
+                        string dirName = Path.GetFileName(dir);
+                        if (dirName.Equals("BepInEx", StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        string linkPath = Path.Combine(pluginsDir, dirName);
+                        if (Directory.Exists(linkPath) && new DirectoryInfo(linkPath).LinkTarget != null)
+                            Directory.Delete(linkPath, false);
+
+                        if (!Directory.Exists(linkPath))
+                            Directory.CreateSymbolicLink(linkPath, dir);
+                    }
+
+                    foreach (var file in topFiles)
+                    {
+                        string fileName = Path.GetFileName(file);
+                        if (!fileName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) &&
+                            !fileName.EndsWith(".cfg", StringComparison.OrdinalIgnoreCase))
+                            continue;
+
+                        string linkPath = Path.Combine(pluginsDir, fileName);
+                        if (File.Exists(linkPath) && new FileInfo(linkPath).LinkTarget != null)
+                            File.Delete(linkPath);
+
+                        if (!File.Exists(linkPath))
+                            File.CreateSymbolicLink(linkPath, file);
+                    }
+
+                    totalAppliedFiles += Directory.GetFiles(packStageDir, "*", SearchOption.AllDirectories).Length;
+                    continue;
+                }
+            }
 
             foreach (string stagedFile in Directory.EnumerateFiles(packStageDir, "*", SearchOption.AllDirectories))
             {
@@ -139,6 +229,7 @@ public class ValheimAssetPackService
 
         return $"Synced {activePacks.Count} Valheim HD asset pack(s) ({totalAppliedFiles} files deployed, vanilla backup intact).";
     }
+
     public async Task SyncDeployedAssetPacksAsync(
         string gameInstallPath,
         IEnumerable<InstalledModItem> orderedAssetPacks,
@@ -147,7 +238,6 @@ public class ValheimAssetPackService
         string summary = await Task.Run(() => SyncDeployedAssetPacks(gameInstallPath, orderedAssetPacks));
         telemetryLog?.Invoke($"[Asset Sync] {summary}");
     }
-
     public static async Task PreWarmAssetPacksAsync(
         string gameInstallPath,
         IEnumerable<InstalledModItem> activeAssetPacks,
@@ -162,23 +252,12 @@ public class ValheimAssetPackService
             if (!Directory.Exists(packStageDir))
                 continue;
 
-            bool isStagedPack = packStageDir.Replace('\\', '/').Contains($"/{StagingRootName}/{PacksSubdir}/");
             foreach (string stagedFile in Directory.EnumerateFiles(packStageDir, "*", SearchOption.AllDirectories))
             {
                 if (Path.GetFileName(stagedFile).StartsWith(".percival", StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                if (isStagedPack)
-                {
-                    string relPath = Path.GetRelativePath(packStageDir, stagedFile);
-                    string deployedPath = Path.Combine(gameInstallPath, relPath);
-                    if (File.Exists(deployedPath))
-                        filesToWarm.Add(deployedPath);
-                }
-                else
-                {
-                    filesToWarm.Add(stagedFile);
-                }
+                filesToWarm.Add(stagedFile);
             }
         }
 

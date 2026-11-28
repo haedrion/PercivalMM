@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using PercivalMM.Core.Models;
 
@@ -12,14 +13,12 @@ namespace PercivalMM.Core.Services
 
         public static string? LocateModsSettingsPath(string gameRootPath)
         {
-            // Derive the SteamLibrary root from ".../SteamLibrary/steamapps/common/The Witcher 3"
             var commonDir = Directory.GetParent(gameRootPath);
             var steamAppsDir = commonDir?.Parent;
 
             var candidateSteamApps = new List<string>();
             if (steamAppsDir != null) candidateSteamApps.Add(steamAppsDir.FullName);
 
-            // Fallback to default ~/.local/share/Steam/steamapps in case compatdata lives on the boot drive
             string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             string defaultSteamApps = Path.Combine(home, ".local/share/Steam/steamapps");
             if (!candidateSteamApps.Contains(defaultSteamApps))
@@ -54,10 +53,31 @@ namespace PercivalMM.Core.Services
             var sb = new StringBuilder();
             foreach (var mod in mods)
             {
-                sb.AppendLine($"[{mod.Name}]");
-                sb.AppendLine($"Enabled={(mod.IsEnabled ? 1 : 0)}");
-                sb.AppendLine($"Priority={mod.Priority}");
-                sb.AppendLine();
+                if (mod.IsSeparator) continue;
+
+                // Expand container mods/mod* subfolders so multi-part Nexus archives register every mod* entry
+                if (!string.IsNullOrEmpty(mod.StagingPath) && Directory.Exists(Path.Combine(mod.StagingPath, "mods")))
+                {
+                    var subModDirs = Directory.GetDirectories(Path.Combine(mod.StagingPath, "mods"))
+                        .OrderBy(d => Path.GetFileName(d), StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var subDir in subModDirs)
+                    {
+                        string subModName = Path.GetFileName(subDir);
+                        sb.AppendLine($"[{subModName}]");
+                        sb.AppendLine($"Enabled={(mod.IsEnabled ? 1 : 0)}");
+                        sb.AppendLine($"Priority={mod.Priority}");
+                        sb.AppendLine();
+                    }
+                }
+                else
+                {
+                    // Legacy non-container mod folder fallback
+                    sb.AppendLine($"[{mod.Name}]");
+                    sb.AppendLine($"Enabled={(mod.IsEnabled ? 1 : 0)}");
+                    sb.AppendLine($"Priority={mod.Priority}");
+                    sb.AppendLine();
+                }
             }
 
             File.WriteAllText(settingsPath, sb.ToString());
