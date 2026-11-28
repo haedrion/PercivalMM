@@ -279,7 +279,12 @@ namespace PercivalMM.Core.Services
             });
             Console.WriteLine($"✅ Staged Valheim plugin container: {displayName}");
         }
-                private static void InstallNoMansSkyArchive(string tempExtractionPath, string archivePath, string targetGameRootDirectory)
+          private static readonly string[] NmsAssetRoots =
+        {
+            "METADATA", "MODELS", "TEXTURES", "SHADERS", "AUDIO", "UI", "GLOBALS", "FONTS", "PIPELINES"
+        };
+
+        private static void InstallNoMansSkyArchive(string tempExtractionPath, string archivePath, string targetGameRootDirectory)
         {
             string displayName = ModContainerService.CleanArchiveDisplayName(archivePath);
             string containerDir = ModContainerService.GetContainerDirectory(targetGameRootDirectory, displayName);
@@ -289,28 +294,40 @@ namespace PercivalMM.Core.Services
             string? nestedMods = Directory.GetDirectories(tempExtractionPath, "MODS", SearchOption.AllDirectories).FirstOrDefault();
             string sourcePayload = nestedMods ?? tempExtractionPath;
 
-            // Unwrap single inner mod folder even if author included README.txt / preview images alongside it
-            var subDirs = Directory.GetDirectories(sourcePayload);
-            var nonDocFiles = Directory.GetFiles(sourcePayload)
-                .Where(f => !f.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
-                         && !f.EndsWith(".md", StringComparison.OrdinalIgnoreCase)
-                         && !f.EndsWith(".url", StringComparison.OrdinalIgnoreCase)
-                         && !f.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
-                         && !f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase))
-                .ToArray();
+            // Find the actual mod root folder that directly contains NMS asset folders (METADATA, MODELS, TEXTURES, etc.)
+            var nmsRootSubdir = Directory.GetDirectories(sourcePayload, "*", SearchOption.AllDirectories)
+                .FirstOrDefault(d => NmsAssetRoots.Contains(Path.GetFileName(d), StringComparer.OrdinalIgnoreCase));
 
-            if (subDirs.Length == 1 && nonDocFiles.Length == 0)
+            if (nmsRootSubdir != null)
             {
-                modFolderName = Path.GetFileName(subDirs[0]);
-                sourcePayload = subDirs[0];
+                var actualModDir = Directory.GetParent(nmsRootSubdir);
+                if (actualModDir != null && actualModDir.FullName.StartsWith(sourcePayload, StringComparison.OrdinalIgnoreCase))
+                {
+                    sourcePayload = actualModDir.FullName;
+                    if (!actualModDir.FullName.Equals(tempExtractionPath, StringComparison.OrdinalIgnoreCase) &&
+                        !actualModDir.Name.Equals("MODS", StringComparison.OrdinalIgnoreCase))
+                    {
+                        modFolderName = actualModDir.Name;
+                    }
+                }
             }
-
-            // Detect legacy pre-Worlds single .pak mods so user knows why NMS might skip them
-            var pakFiles = Directory.GetFiles(sourcePayload, "*.pak", SearchOption.AllDirectories);
-            var mbinFiles = Directory.GetFiles(sourcePayload, "*.mbin", SearchOption.AllDirectories);
-            if (pakFiles.Length > 0 && mbinFiles.Length == 0)
+            else
             {
-                Console.WriteLine($"⚠️ [NMS Warning] '{displayName}' contains legacy .pak archive(s) (pre-Worlds Part II format) — modern NMS may ignore unextracted .pak mods.");
+                // Fallback: unwrap single inner mod folder ignoring README/docs
+                var subDirs = Directory.GetDirectories(sourcePayload);
+                var nonDocFiles = Directory.GetFiles(sourcePayload)
+                    .Where(f => !f.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)
+                             && !f.EndsWith(".md", StringComparison.OrdinalIgnoreCase)
+                             && !f.EndsWith(".url", StringComparison.OrdinalIgnoreCase)
+                             && !f.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+                             && !f.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+
+                if (subDirs.Length == 1 && nonDocFiles.Length == 0)
+                {
+                    modFolderName = Path.GetFileName(subDirs[0]);
+                    sourcePayload = subDirs[0];
+                }
             }
 
             string containerDest = Path.Combine(containerDir, "GAMEDATA", "MODS", modFolderName);
@@ -325,7 +342,6 @@ namespace PercivalMM.Core.Services
             });
             Console.WriteLine($"✅ Staged No Man's Sky mod container: {displayName} (folder: {modFolderName})");
         }
-
 
         private static void InstallExpedition33Archive(string tempExtractionPath, string archivePath, string targetGameRootDirectory)
         {
